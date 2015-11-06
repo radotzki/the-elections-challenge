@@ -1,1 +1,1 @@
-# the-elections-challenge
+# The Elections Challenge
