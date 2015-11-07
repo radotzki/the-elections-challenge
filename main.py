@@ -21,6 +21,7 @@ def identify_and_set_correct_types(df):
     for col in ['Most_Important_Issue', 'Main_transportation', 'Occupation']:
         partial = pd.get_dummies(df[col], col, '_')
         df = df.join(partial)
+        del df[col]
         
     return df
         
