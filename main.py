@@ -64,7 +64,7 @@ def main():
 #    df = data_imputation(df)
     print_missing_values(df)
 
-    # plot_log_density_function(df, 'Yearly_IncomeK')
+    plot_log_density_function(df, 'Yearly_IncomeK')
 
 
 def plot_log_density_function(df, column):
@@ -73,7 +73,7 @@ def plot_log_density_function(df, column):
 
 def plot_density_function(df, column, trans=lambda x: x):
     df[column].plot(kind='kde')
-    df['Yearly_IncomeK'].map(trans).plot(kind='kde')
+    # df['Yearly_IncomeK'].map(trans).plot(kind='kde')
     # p.savefig('foo.png')
     # p.clf()
     p.show()
