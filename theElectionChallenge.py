@@ -18,6 +18,7 @@ from sklearn.linear_model import Perceptron
 from sklearn.svm import LinearSVC
 import pandas as pd
 import scipy
+import scipy.interpolate
 
 
 def array_diff(a, b):
@@ -26,11 +27,13 @@ def array_diff(a, b):
 
 
 def split_features_by_type(_df):
+    _df = _df.dropna()
     all_features = [c for c in _df.columns if c != 'Vote']
     discrete_features = [c for c in all_features if len(_df[c].unique()) <= 20]
     continuous_features = array_diff(all_features, discrete_features)
     categorical_features = list(_df.keys()[_df.dtypes.map(lambda x: x == 'object')])
-    numeric_features = array_diff(all_features, categorical_features)
+    binary_features = [c for c in all_features if len(_df[c].unique()) == 2]
+    numeric_features = array_diff(all_features, categorical_features) + binary_features
     return [all_features, discrete_features, continuous_features, categorical_features, numeric_features]
 
 
@@ -46,7 +49,7 @@ def mark_negative_values_as_nan(_df):
         'Avg_size_per_room',
         'Garden_sqr_meter_per_person_in_residancy_area'
     ]
-    for f in positive_features:
+    for f in [x for x in _df.columns if x in positive_features]:
         _df[f] = _df[f].map(lambda x: x if x >= 0 else np.nan)
     return _df
 
@@ -62,21 +65,14 @@ def outlier_detection(_df, features):
     return _df
 
 
-def fill_missing_values_in_linear_depended_features(_df, f1, f2):
-    xValues = _df[f1].values
-    yValues = _df[f2].values
-    m = (yValues[0] - yValues[1]) / (xValues[0] - xValues[1])
-    const = yValues[0] - (m * xValues[0])
-
-    def get_f2_by_f1_value(f1_value):
-        return const + (m * f1_value)
-
-    def fill_f2(row):
-        if row[f1] >= 0:
-            row[f2] = get_f2_by_f1_value(row[f1])
-        return row
-
-    return _df.apply(fill_f2, axis=1)
+def fill_missing_values_in_linear_depended_features(df, f1, f2):
+# TODO
+    y_interp=scipy.interpolate.interp1d(df[f1].values, df[f2].values)
+    f2_isnull = df[f2].isnull()
+    # def foo(y):
+    #     print y
+    #     return y_interp(y)
+    df[f2][f2_isnull] = df[f1][f2_isnull].map(foo)
 
 
 def categorical_features_transformation(_df):
@@ -93,14 +89,14 @@ def categorical_features_transformation(_df):
     return _df
 
 
-def fill_missing_values(_df):
+def fill_missing_values(_df, dis_features, cont_features):
     # for discrete features we will use 'most_frequent' strategy
     imp_discrete = Imputer(missing_values='NaN', strategy='most_frequent', axis=0)
-    _df[DISCRETE_FEATURES] = imp_discrete.fit_transform(_df[DISCRETE_FEATURES].values)
+    _df[dis_features] = imp_discrete.fit_transform(_df[dis_features].values)
 
     # for continuous features we will use 'mean' strategy
     imp_continuous = Imputer(missing_values='NaN', strategy='mean', axis=0)
-    _df[CONTINUOUS_FEATURES] = imp_continuous.fit_transform(_df[CONTINUOUS_FEATURES].values)
+    _df[cont_features] = imp_continuous.fit_transform(_df[cont_features].values)
     return _df
 
 
@@ -114,6 +110,8 @@ def uniform_to_normal(_df):
     for c in continuous_features:
         # test for normal distribution
         v = shapiro(_df[c])[1]
+        # v=stats.kstest(df[c].values, 'uniform')
+        # TODO: scale first (0-1)
         print str(v) + ": " + c
         if v > 0:
             uniform.append(c)
@@ -167,16 +165,16 @@ def chi2_filter(_df, features_to_test):
     return ret_val
 
 
-def anova_filter(_df):
-    non_categorical = array_diff(ALL_FEATURES, CATEGORICAL_FEATURES)
-    X = _df[non_categorical].values
+def anova_filter(_df, features):
+    ret_val=Set()
+    X = _df[features].values
     Y = _df.Vote.values
     v = f_classif(X, Y)[1]
     i = 0
 
-    for c in _df[non_categorical].columns:
+    for c in features:
         if v[i] < alpha:
-            FEATURES_TO_KEEP.append(c)
+            ret_val.add(c)
         i += 1
 
 
@@ -262,12 +260,13 @@ def get_score(X, Y, clf, kf):
 
 
 def find_most_correlated(df, features):
+    df=categorical_features_transformation(df)
     max_cor = 0
     for i in xrange(0, len(features)):
         for j in xrange(i + 1, len(features)):
             pearsonr = scipy.stats.pearsonr(df[features[i]], df[features[j]])
             if pearsonr[1] < alpha:
-                cor = pearsonr[0]
+                cor = abs(pearsonr[0])
                 if (cor > max_cor):
                     max_cor = cor
                     max_i = i
@@ -287,7 +286,6 @@ def main():
 
     all_features, discrete_features, continuous_features, categorical_features, numeric_features = split_features_by_type(df)
     features_to_keep = Set()
-
     df = mark_negative_values_as_nan(df)
     df = outlier_detection(df, continuous_features)
     most_correlated = find_most_correlated(df.dropna(), numeric_features)
@@ -295,25 +293,23 @@ def main():
         feature1, feature2, cof = most_correlated
         if cof < 0.95:
             break
-        print feature1 + " and " + feature2 + " are correlated by " + str(cof) + ". Filling missing values and dropping " + feature1
-        df=fill_missing_values_in_linear_depended_features(df, feature1, feature2)
-        df.drop(feature1, axis=1, inplace=True)
+        print feature1 + " and " + feature2 + " are correlated by " + str(cof) + ". Filling missing values and dropping " + feature2
+        #fill_missing_values_in_linear_depended_features(df, feature1, feature2)
+        df.drop(feature2, axis=1, inplace=True)
         all_features, discrete_features, continuous_features, categorical_features, numeric_features = split_features_by_type(df)
         most_correlated = find_most_correlated(df.dropna(), numeric_features)
 
     df = mark_negative_values_as_nan(df)
+
     df = categorical_features_transformation(df)
-    df = fill_missing_values(df)
+    df = fill_missing_values(df, discrete_features, continuous_features)
     reduce_last_school_grades(df)
     features_to_keep = features_to_keep.union(chi2_filter(df, categorical_features))
-    uniform_to_normal(df)
-    z_score_scaling(df)
-    anova_filter(df)
+    # uniform_to_normal(df)
+    # z_score_scaling(df)
+    anova_filter(df, numeric_features)
 
-    # TODO: make a decision by an automated task
-    similar_features = ['Avg_monthly_expense_when_under_age_21', 'AVG_lottary_expanses',
-                        'Garden_sqr_meter_per_person_in_residancy_area']
-    evaulate_features(df, similar_features)
+    evaulate_features(df, [])
 
     sfs = SFS(df, 'Vote', RandomForestClassifier(n_estimators=3), 18)
     print "features in sfs we didn't select:"
@@ -327,8 +323,6 @@ def main():
             print f
 
     # TODO: remove features according to the wrappers result
-
-    # TODO: suddenly we get that 'Occupation_Satisfaction' is part of the selected features
     print FEATURES_TO_KEEP
 
 
