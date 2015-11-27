@@ -5,6 +5,7 @@
 ###############################################################################
 from sets import Set
 import numpy as np
+from numpy.linalg import lstsq
 from sklearn.preprocessing import Imputer
 from scipy.stats import norm
 from scipy.stats import shapiro
@@ -32,6 +33,7 @@ def split_features_by_type(_df):
     discrete_features = [c for c in all_features if len(_df[c].unique()) <= 20]
     continuous_features = array_diff(all_features, discrete_features)
     categorical_features = list(_df.keys()[_df.dtypes.map(lambda x: x == 'object')])
+    categorical_features.remove("Vote")
     binary_features = [c for c in all_features if len(_df[c].unique()) == 2]
     numeric_features = array_diff(all_features, categorical_features) + binary_features
     return [all_features, discrete_features, continuous_features, categorical_features, numeric_features]
@@ -64,15 +66,25 @@ def outlier_detection(_df, features):
         _df[f] = _df[f].map(lambda x: x if np.abs(x - mean) <= (3 * std) else np.nan)
     return _df
 
+def find_coefficients(Xs, Ys, exponents):
+    X = tuple((tuple((pow(x,p) for p in exponents)) for x in Xs))
+    y = tuple(((y) for y in Ys))
+    x, resids, rank, s = lstsq(X,y)
+    return x
 
-def fill_missing_values_in_linear_depended_features(df, f1, f2):
-# TODO
-    y_interp=scipy.interpolate.interp1d(df[f1].values, df[f2].values)
-    f2_isnull = df[f2].isnull()
-    # def foo(y):
-    #     print y
-    #     return y_interp(y)
-    df[f2][f2_isnull] = df[f1][f2_isnull].map(foo)
+
+def fill_f1_by_f2(df, f1, f2):
+    rows_to_complete = df[f1].isnull() & df[f2].notnull()
+
+    df_dropna = df[[f1, f2]].dropna()
+    coefs = find_coefficients(df_dropna[f2],df_dropna[f1],range(2)) #linear approximation
+    # for i, row in df.iterrows():
+    #     if rows_to_complete[i]:
+    #         x=df[f1][i]
+    #         print x
+    #         print y_interp(x)
+    #         df[f2][i] = y_interp(df[f1][i])
+    df[f1][rows_to_complete] = df[f2][rows_to_complete].map(lambda x: coefs[0] + coefs[1]*x)
 
 
 def categorical_features_transformation(_df):
@@ -104,7 +116,7 @@ def drop_missing_values(_df):
     _df.dropna(inplace=True)
 
 
-def uniform_to_normal(_df):
+def uniform_to_normal(_df, continuous_features):
     i = 0
     uniform = []
     for c in continuous_features:
@@ -112,7 +124,6 @@ def uniform_to_normal(_df):
         v = shapiro(_df[c])[1]
         # v=stats.kstest(df[c].values, 'uniform')
         # TODO: scale first (0-1)
-        print str(v) + ": " + c
         if v > 0:
             uniform.append(c)
         i += 1
@@ -132,9 +143,9 @@ def uniform_to_normal(_df):
     _df.dropna(inplace=True)
 
 
-def z_score_scaling(_df):
-    scaler = preprocessing.StandardScaler().fit(_df[CONTINUOUS_FEATURES])
-    _df[CONTINUOUS_FEATURES] = scaler.transform(_df[CONTINUOUS_FEATURES])
+def z_score_scaling(_df, continuous_features):
+    scaler = preprocessing.StandardScaler().fit(_df[continuous_features])
+    _df[continuous_features] = scaler.transform(_df[continuous_features])
 
 
 def reduce_last_school_grades(_df):
@@ -176,6 +187,7 @@ def anova_filter(_df, features):
         if v[i] < alpha:
             ret_val.add(c)
         i += 1
+    return ret_val
 
 
 ###############################################################################
@@ -206,23 +218,22 @@ def wrappersTest(X, Y, kf):
     return res
 
 
-def evaulate_features(_df, similar_features):
+def evaulate_features(_df, Y, similar_features):
     n_folds = 5
     kf = KFold(n=len(_df), n_folds=n_folds)
-    Y = _df.Vote.values
 
     res = {}
     print 'Wrappers score with all selected features:'
-    res['all'] = wrappersTest(_df[FEATURES_TO_KEEP].values, Y, kf)
+    res['all'] = wrappersTest(_df.values, Y, kf)
 
-    print 'Wrappers score without similar_features:'
-    res['withou similar_features'] = wrappersTest(_df[FEATURES_TO_KEEP].drop(similar_features, axis=1).values, Y, kf)
-
-    for s in similar_features:
-        print 'Wrappers score without ' + str(s) + ':'
-        res[s] = wrappersTest(_df[FEATURES_TO_KEEP].drop(s, axis=1).values, Y, kf)
-
-    print pd.DataFrame.from_dict(res)
+    # print 'Wrappers score without similar_features:'
+    # res['withou similar_features'] = wrappersTest(_df[FEATURES_TO_KEEP].drop(similar_features, axis=1).values, Y, kf)
+    #
+    # for s in similar_features:
+    #     print 'Wrappers score without ' + str(s) + ':'
+    #     res[s] = wrappersTest(_df[FEATURES_TO_KEEP].drop(s, axis=1).values, Y, kf)
+    #
+    # print pd.DataFrame.from_dict(res)
     return res
 
 
@@ -260,7 +271,6 @@ def get_score(X, Y, clf, kf):
 
 
 def find_most_correlated(df, features):
-    df=categorical_features_transformation(df)
     max_cor = 0
     for i in xrange(0, len(features)):
         for j in xrange(i + 1, len(features)):
@@ -288,42 +298,49 @@ def main():
     features_to_keep = Set()
     df = mark_negative_values_as_nan(df)
     df = outlier_detection(df, continuous_features)
+    df = categorical_features_transformation(df)
     most_correlated = find_most_correlated(df.dropna(), numeric_features)
     while most_correlated is not None:
         feature1, feature2, cof = most_correlated
         if cof < 0.95:
             break
+        # feature1, feature2 = feature2, feature1
         print feature1 + " and " + feature2 + " are correlated by " + str(cof) + ". Filling missing values and dropping " + feature2
-        #fill_missing_values_in_linear_depended_features(df, feature1, feature2)
+        fill_f1_by_f2(df, feature2, feature1)
         df.drop(feature2, axis=1, inplace=True)
-        all_features, discrete_features, continuous_features, categorical_features, numeric_features = split_features_by_type(df)
+        for x in [all_features, discrete_features, continuous_features, categorical_features, numeric_features]:
+            if feature2 in x:
+                x.remove(feature2)
         most_correlated = find_most_correlated(df.dropna(), numeric_features)
 
     df = mark_negative_values_as_nan(df)
-
-    df = categorical_features_transformation(df)
     df = fill_missing_values(df, discrete_features, continuous_features)
     reduce_last_school_grades(df)
     features_to_keep = features_to_keep.union(chi2_filter(df, categorical_features))
-    # uniform_to_normal(df)
-    # z_score_scaling(df)
-    anova_filter(df, numeric_features)
+    uniform_to_normal(df, continuous_features)
+    # todo test for normality and maybe use log-values
+    z_score_scaling(df, continuous_features)
+    print len(features_to_keep)
+    print features_to_keep
+    features_to_keep = features_to_keep.union(anova_filter(df, numeric_features))
+    print len(features_to_keep)
+    print features_to_keep
 
-    evaulate_features(df, [])
+    # evaulate_features(df[list(features_to_keep)], df.Vote.values, [])
 
     sfs = SFS(df, 'Vote', RandomForestClassifier(n_estimators=3), 18)
     print "features in sfs we didn't select:"
     for f in sfs:
-        if f not in FEATURES_TO_KEEP:
+        if f not in features_to_keep:
             print f
     print ''
     print "features we selected and sfs didn't:"
-    for f in FEATURES_TO_KEEP:
+    for f in features_to_keep:
         if f not in sfs:
             print f
 
     # TODO: remove features according to the wrappers result
-    print FEATURES_TO_KEEP
+    print features_to_keep
 
 
 if __name__ == "__main__":
