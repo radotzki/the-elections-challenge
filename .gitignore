@@ -1,9 +1,4 @@
 .spyderproject
 .spyderworkspace
-/.idea/.name
-/.idea/misc.xml
-/.idea/modules.xml
-/.idea/the-elections-challenge.iml
-/.idea/vcs.xml
-/.idea/workspace.xml
+.idea
 .ipynb_checkpoints
