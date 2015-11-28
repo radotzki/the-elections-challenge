@@ -5,9 +5,8 @@
 ###############################################################################
 import numpy as np
 from numpy.linalg import lstsq
-from sklearn.preprocessing import Imputer
-from scipy.stats import norm
-from scipy.stats import shapiro
+from sklearn.preprocessing import Imputer, MinMaxScaler
+from scipy.stats import norm, kstest
 from sklearn import preprocessing
 from sklearn.cross_validation import KFold
 from sklearn.ensemble import RandomForestClassifier
@@ -115,31 +114,30 @@ def drop_missing_values(_df):
     _df.dropna(inplace=True)
 
 
-def uniform_to_normal(_df, continuous_features):
-    i = 0
-    uniform = ['Avg_monthly_expense_when_under_age_21', 'AVG_lottary_expanses', 'Yearly_ExpensesK', 'Financial_balance_score_(0-1)', '%Of_Household_Income', 'Avg_government_satisfaction', 'Avg_education_importance', 'Avg_environmental_importance', 'Avg_Satisfaction_with_previous_vote', 'Avg_monthly_income_all_years', '%Time_invested_in_work', 'Yearly_IncomeK', '%_satisfaction_financial_policy', 'Overall_happiness_score']
-    # for c in continuous_features:
-    #     # test for normal distribution
-    #     v = shapiro(_df[c])[1]
-    #     # v=stats.kstest(df[c].values, 'uniform')
-    #     # TODO: scale first (0-1)
-    #     if v > 0:
-    #         uniform.append(c)
-    #     i += 1
+def uniform_to_normal(df, continuous_features):
+    scaler = MinMaxScaler()
+    df_scaled = pd.DataFrame(scaler.fit_transform(df[continuous_features].dropna()), columns=continuous_features)
+    uniform = []
+    alpha = 0.05
+
+    for c in continuous_features:
+        statistic, pvalue = kstest(df_scaled[c], 'uniform')
+        if statistic < alpha:
+            uniform.append(c)
 
     zero_to_one = [f for f in uniform if
-                   _df[f].min() > 0 and _df[f].min() < 0.001 and _df[f].max() < 1 and _df[f].max() > 0.999]
+                   df[f].min() > 0 and df[f].min() < 0.001 and df[f].max() < 1 and df[f].max() > 0.999]
     zero_to_ten = [f for f in uniform if
-                   _df[f].min() > 0 and _df[f].min() < 0.01 and _df[f].max() < 10 and _df[f].max() > 9.99]
+                   df[f].min() > 0 and df[f].min() < 0.01 and df[f].max() < 10 and df[f].max() > 9.99]
     zero_to_hundred = [f for f in uniform if
-                       _df[f].min() > 0 and _df[f].min() < 0.1 and _df[f].max() < 100 and _df[f].max() > 99.9]
+                       df[f].min() > 0 and df[f].min() < 0.1 and df[f].max() < 100 and df[f].max() > 99.9]
     for f in uniform:
-        min = 0 if f in zero_to_one or f in zero_to_ten or f in zero_to_hundred else _df[f].min()
-        max = 1 if f in zero_to_one else (10 if f in zero_to_ten else 100 if f in zero_to_hundred else _df[f].max())
-        _df[f] = _df[f].map(lambda x: norm.ppf((x - min) / (max - min)))
+        min = 0 if f in zero_to_one or f in zero_to_ten or f in zero_to_hundred else df[f].min()
+        max = 1 if f in zero_to_one else (10 if f in zero_to_ten else 100 if f in zero_to_hundred else df[f].max())
+        df[f] = df[f].map(lambda x: norm.ppf((x - min) / (max - min)))
 
-    _df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    _df.dropna(inplace=True)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df.dropna(inplace=True)
 
 
 def z_score_scaling(_df, continuous_features):
@@ -157,7 +155,7 @@ def reduce_last_school_grades(_df):
 ###############################################################################
 from sklearn.feature_selection import chi2, f_classif
 
-alpha = 0.05
+alpha = 0.01
 
 
 def chi2_filter(_df, features_to_test):
