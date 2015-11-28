@@ -117,15 +117,15 @@ def drop_missing_values(_df):
 
 def uniform_to_normal(_df, continuous_features):
     i = 0
-    uniform = []
-    for c in continuous_features:
-        # test for normal distribution
-        v = shapiro(_df[c])[1]
-        # v=stats.kstest(df[c].values, 'uniform')
-        # TODO: scale first (0-1)
-        if v > 0:
-            uniform.append(c)
-        i += 1
+    uniform = ['Avg_monthly_expense_when_under_age_21', 'AVG_lottary_expanses', 'Yearly_ExpensesK', 'Financial_balance_score_(0-1)', '%Of_Household_Income', 'Avg_government_satisfaction', 'Avg_education_importance', 'Avg_environmental_importance', 'Avg_Satisfaction_with_previous_vote', 'Avg_monthly_income_all_years', '%Time_invested_in_work', 'Yearly_IncomeK', '%_satisfaction_financial_policy', 'Overall_happiness_score']
+    # for c in continuous_features:
+    #     # test for normal distribution
+    #     v = shapiro(_df[c])[1]
+    #     # v=stats.kstest(df[c].values, 'uniform')
+    #     # TODO: scale first (0-1)
+    #     if v > 0:
+    #         uniform.append(c)
+    #     i += 1
 
     zero_to_one = [f for f in uniform if
                    _df[f].min() > 0 and _df[f].min() < 0.001 and _df[f].max() < 1 and _df[f].max() > 0.999]
@@ -270,16 +270,32 @@ def get_score(X, Y, clf, kf):
 
 
 def find_most_correlated(df, features):
+    votes = df.Vote.unique()
+    votes.sort()
     max_cor = 0
     for i in xrange(0, len(features)):
         for j in xrange(i + 1, len(features)):
             pearsonr = scipy.stats.pearsonr(df[features[i]], df[features[j]])
             if pearsonr[1] < alpha:
                 cor = abs(pearsonr[0])
+                if cor == 1:
+                    return [features[i], features[j], 1]
+                #let's check the correlation in each label separatly, and use the minimum
+                min_per_label_cor = 1
+                for vote in votes:
+                    per_label_pearson = scipy.stats.pearsonr(df[df.Vote == vote][features[i]],
+                                                          df[df.Vote == vote][features[j]])
+                    if (per_label_pearson[1]>= alpha):
+                        min_per_label_cor = 0
+                        break # we don't want to use this
+                    if (abs(per_label_pearson[0])<min_per_label_cor):
+                        min_per_label_cor = abs(per_label_pearson[0])
+                cor=min(cor, min_per_label_cor)
                 if (cor > max_cor):
                     max_cor = cor
                     max_i = i
                     max_j = j
+
     if max_cor > 0:
         return [features[max_i], features[max_j], max_cor]
     else:
@@ -314,15 +330,17 @@ def main():
 
     df = mark_negative_values_as_nan(df)
     reduce_last_school_grades(df)
-    features_to_keep = features_to_keep.union(chi2_filter(df.dropna(), categorical_features))
+    features_from_chi2 = chi2_filter(df.dropna(), categorical_features)
+    print str(len(features_from_chi2)) + " features to keep from chi2: " + str(features_from_chi2)
+    features_to_keep = features_to_keep.union(features_from_chi2)
     uniform_to_normal(df, continuous_features)
     # todo test for normality and maybe use log-values
     z_score_scaling(df, continuous_features)
-    print len(features_to_keep)
-    print features_to_keep
-    features_to_keep = features_to_keep.union(anova_filter(df.dropna(), numeric_features))
-    print len(features_to_keep)
-    print features_to_keep
+    features_from_anova = anova_filter(df.dropna(), numeric_features)
+    print str(len(features_from_anova)) + " features to keep from anova: " + str(features_from_anova)
+    features_to_keep = features_to_keep.union(features_from_anova)
+    print str(len(features_to_keep)) + " total features to keep: " + str(features_to_keep)
+
 
     #since our method of dealing with the values that are still missing is quite naive, we don't want to do it before chi2 and anova or the results will get biased
     df = fill_missing_values(df, discrete_features, continuous_features)
