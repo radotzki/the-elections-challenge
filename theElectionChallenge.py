@@ -3,7 +3,6 @@
 ###############################################################################
 ################## Data preparation ###########################################
 ###############################################################################
-from sets import Set
 import numpy as np
 from numpy.linalg import lstsq
 from sklearn.preprocessing import Imputer
@@ -163,7 +162,7 @@ alpha = 0.05
 
 def chi2_filter(_df, features_to_test):
     ret_val = []
-    X = _df.drop(['Vote'], axis=1).values
+    X = _df[features_to_test].values
     Y = _df.Vote.values
     v = chi2(X, Y)[1]
     i = 0
@@ -177,7 +176,7 @@ def chi2_filter(_df, features_to_test):
 
 
 def anova_filter(_df, features):
-    ret_val=Set()
+    ret_val=set()
     X = _df[features].values
     Y = _df.Vote.values
     v = f_classif(X, Y)[1]
@@ -197,12 +196,12 @@ def anova_filter(_df, features):
 
 def wrappersTest(X, Y, kf):
     classifiers = {
-        "Nearest Neighbors": KNeighborsClassifier(15),
-        "Naive Bayes": GaussianNB(),
-        "Decision Tree": DecisionTreeClassifier(max_depth=5),
-        "Perceptron": Perceptron(n_iter=50),
-        #     "Linear SVM OVO": SVC(kernel="linear", C=1),
-        "Linear SVM OVR": LinearSVC(C=1),
+        # "Nearest Neighbors": KNeighborsClassifier(15),
+        # "Naive Bayes": GaussianNB(),
+        # "Decision Tree": DecisionTreeClassifier(max_depth=5),
+        # "Perceptron": Perceptron(n_iter=50),
+        # "Linear SVM OVO": SVC(kernel="linear", C=1),
+        # "Linear SVM OVR": LinearSVC(C=1),
         "Random Forest": RandomForestClassifier(n_estimators=3)
     }
     res = {}
@@ -295,7 +294,7 @@ def main():
     df = pd.read_csv('dataset/ElectionsData.csv')
 
     all_features, discrete_features, continuous_features, categorical_features, numeric_features = split_features_by_type(df)
-    features_to_keep = Set()
+    features_to_keep = set()
     df = mark_negative_values_as_nan(df)
     df = outlier_detection(df, continuous_features)
     df = categorical_features_transformation(df)
@@ -314,19 +313,19 @@ def main():
         most_correlated = find_most_correlated(df.dropna(), numeric_features)
 
     df = mark_negative_values_as_nan(df)
-    df = fill_missing_values(df, discrete_features, continuous_features)
     reduce_last_school_grades(df)
-    features_to_keep = features_to_keep.union(chi2_filter(df, categorical_features))
+    features_to_keep = features_to_keep.union(chi2_filter(df.dropna(), categorical_features))
     uniform_to_normal(df, continuous_features)
     # todo test for normality and maybe use log-values
     z_score_scaling(df, continuous_features)
     print len(features_to_keep)
     print features_to_keep
-    features_to_keep = features_to_keep.union(anova_filter(df, numeric_features))
+    features_to_keep = features_to_keep.union(anova_filter(df.dropna(), numeric_features))
     print len(features_to_keep)
     print features_to_keep
 
-    # evaulate_features(df[list(features_to_keep)], df.Vote.values, [])
+    #since our method of dealing with the values that are still missing is quite naive, we don't want to do it before chi2 and anova or the results will get biased
+    df = fill_missing_values(df, discrete_features, continuous_features)
 
     sfs = SFS(df, 'Vote', RandomForestClassifier(n_estimators=3), 18)
     print "features in sfs we didn't select:"
@@ -339,9 +338,13 @@ def main():
         if f not in sfs:
             print f
 
-    # TODO: remove features according to the wrappers result
-    print features_to_keep
+    #in the spirit of taking a conservative aproach for feature selection, we'll add to our selected feature the feature selected by sfs.
+    #in practice, they're already included in our selection.
+    features_to_keep = features_to_keep.union(sfs)
 
+    evaulate_features(df[list(features_to_keep)], df.Vote.values, [])
+
+    print features_to_keep
 
 if __name__ == "__main__":
     main()
