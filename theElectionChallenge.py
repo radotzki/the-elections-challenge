@@ -3,6 +3,7 @@
 ###############################################################################
 ################## Data preparation ###########################################
 ###############################################################################
+import math
 import numpy as np
 from numpy.linalg import lstsq
 from sklearn.preprocessing import Imputer, MinMaxScaler
@@ -117,13 +118,13 @@ def drop_missing_values(_df):
 def uniform_to_normal(df, continuous_features):
     scaler = MinMaxScaler()
     df_scaled = pd.DataFrame(scaler.fit_transform(df[continuous_features].dropna()), columns=continuous_features)
-    uniform = []
+    uniform = set()
     alpha = 0.05
 
     for c in continuous_features:
-        statistic, pvalue = kstest(df_scaled[c], 'uniform')
+        statistic, pvalue = kstest(df_scaled[c], scipy.stats.uniform().cdf)
         if statistic < alpha:
-            uniform.append(c)
+            uniform.add(c)
 
     zero_to_one = [f for f in uniform if
                    df[f].min() > 0 and df[f].min() < 0.001 and df[f].max() < 1 and df[f].max() > 0.999]
@@ -134,10 +135,11 @@ def uniform_to_normal(df, continuous_features):
     for f in uniform:
         min = 0 if f in zero_to_one or f in zero_to_ten or f in zero_to_hundred else df[f].min()
         max = 1 if f in zero_to_one else (10 if f in zero_to_ten else 100 if f in zero_to_hundred else df[f].max())
-        df[f] = df[f].map(lambda x: norm.ppf((x - min) / (max - min)))
+        df[f] = df[f].map(lambda x: norm.ppf((x - min) / (max - min))) # we could use df_scaled but this should give us better results since what we think are the actual min and max, and not the observed min and max
 
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df.dropna(inplace=True)
+    return uniform
 
 
 def z_score_scaling(_df, continuous_features):
@@ -155,7 +157,7 @@ def reduce_last_school_grades(_df):
 ###############################################################################
 from sklearn.feature_selection import chi2, f_classif
 
-alpha = 0.01
+alpha = 0.05
 
 
 def chi2_filter(_df, features_to_test):
@@ -181,6 +183,8 @@ def anova_filter(_df, features):
     i = 0
 
     for c in features:
+        if c=='Number_of_valued_Kneset_members':
+            print c + " anova: " + str(v[i])
         if v[i] < alpha:
             ret_val.add(c)
         i += 1
@@ -312,33 +316,20 @@ def main():
     df = mark_negative_values_as_nan(df)
     df = outlier_detection(df, continuous_features)
     df = categorical_features_transformation(df)
-    most_correlated = find_most_correlated(df.dropna(), numeric_features)
-    while most_correlated is not None:
-        feature1, feature2, cof = most_correlated
-        if cof < 0.95:
-            break
-        # feature1, feature2 = feature2, feature1
-        print feature1 + " and " + feature2 + " are correlated by " + str(cof) + ". Filling missing values and dropping " + feature2
-        fill_f1_by_f2(df, feature2, feature1)
-        df.drop(feature2, axis=1, inplace=True)
-        for x in [all_features, discrete_features, continuous_features, categorical_features, numeric_features]:
-            if feature2 in x:
-                x.remove(feature2)
-        most_correlated = find_most_correlated(df.dropna(), numeric_features)
-
+    drop_redundant_features(df, all_features, categorical_features, continuous_features, discrete_features,
+                            numeric_features)
     df = mark_negative_values_as_nan(df)
     reduce_last_school_grades(df)
     features_from_chi2 = chi2_filter(df.dropna(), categorical_features)
     print str(len(features_from_chi2)) + " features to keep from chi2: " + str(features_from_chi2)
     features_to_keep = features_to_keep.union(features_from_chi2)
-    uniform_to_normal(df, continuous_features)
-    # todo test for normality and maybe use log-values
+    uniform = uniform_to_normal(df, continuous_features)
+    print "uniform features: " + str(uniform)
     z_score_scaling(df, continuous_features)
     features_from_anova = anova_filter(df.dropna(), numeric_features)
     print str(len(features_from_anova)) + " features to keep from anova: " + str(features_from_anova)
     features_to_keep = features_to_keep.union(features_from_anova)
     print str(len(features_to_keep)) + " total features to keep: " + str(features_to_keep)
-
 
     #since our method of dealing with the values that are still missing is quite naive, we don't want to do it before chi2 and anova or the results will get biased
     df = fill_missing_values(df, discrete_features, continuous_features)
@@ -361,6 +352,25 @@ def main():
     evaulate_features(df[list(features_to_keep)], df.Vote.values, [])
 
     print features_to_keep
+
+
+def drop_redundant_features(df, all_features, categorical_features, continuous_features, discrete_features,
+                            numeric_features):
+    most_correlated = find_most_correlated(df.dropna(), numeric_features)
+    while most_correlated is not None:
+        feature1, feature2, cof = most_correlated
+        if cof < 0.95:
+            break
+        # feature1, feature2 = feature2, feature1
+        print feature1 + " and " + feature2 + " are correlated by " + str(
+            cof) + ". Filling missing values and dropping " + feature2
+        fill_f1_by_f2(df, feature2, feature1)
+        df.drop(feature2, axis=1, inplace=True)
+        for x in [all_features, discrete_features, continuous_features, categorical_features, numeric_features]:
+            if feature2 in x:
+                x.remove(feature2)
+        most_correlated = find_most_correlated(df.dropna(), numeric_features)
+
 
 if __name__ == "__main__":
     main()
