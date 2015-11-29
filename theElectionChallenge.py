@@ -3,7 +3,6 @@
 ###############################################################################
 ################## Data preparation ###########################################
 ###############################################################################
-import math
 import numpy as np
 from numpy.linalg import lstsq
 from sklearn.preprocessing import Imputer, MinMaxScaler
@@ -15,7 +14,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import Perceptron
-from sklearn.svm import LinearSVC
+from sklearn.svm import LinearSVC, SVC
 import pandas as pd
 import scipy
 import scipy.interpolate
@@ -29,10 +28,12 @@ def array_diff(a, b):
 def split_features_by_type(_df):
     _df = _df.dropna()
     all_features = [c for c in _df.columns if c != 'Vote']
+    all_features.remove("split")
     discrete_features = [c for c in all_features if len(_df[c].unique()) <= 20]
     continuous_features = array_diff(all_features, discrete_features)
     categorical_features = list(_df.keys()[_df.dtypes.map(lambda x: x == 'object')])
     categorical_features.remove("Vote")
+    categorical_features.remove("split")
     binary_features = [c for c in all_features if len(_df[c].unique()) == 2]
     numeric_features = array_diff(all_features, categorical_features) + binary_features
     return [all_features, discrete_features, continuous_features, categorical_features, numeric_features]
@@ -169,6 +170,7 @@ def chi2_filter(_df, features_to_test):
 
     for c in features_to_test:
         if v[i] < alpha:
+            print c + "selected by chi2 with p-value: " + str(v[i])
             ret_val.append(c)
         i += 1
 
@@ -183,9 +185,8 @@ def anova_filter(_df, features):
     i = 0
 
     for c in features:
-        if c=='Number_of_valued_Kneset_members':
-            print c + " anova: " + str(v[i])
         if v[i] < alpha:
+            print c + "selected by anova with p-value: " + str(v[i])
             ret_val.add(c)
         i += 1
     return ret_val
@@ -195,17 +196,17 @@ def anova_filter(_df, features):
 ########################### Wrappers ##########################################
 ###############################################################################
 
+classifiers = {
+    "Nearest Neighbors": KNeighborsClassifier(15),
+    "Naive Bayes": GaussianNB(),
+    "Decision Tree": DecisionTreeClassifier(max_depth=5),
+    "Perceptron": Perceptron(n_iter=50),
+    # "Linear SVM OVO": SVC(kernel="linear", C=1),
+    # "Linear SVM OVR": LinearSVC(C=1),
+    "Random Forest": RandomForestClassifier(n_estimators=3)
+}
 
 def wrappersTest(X, Y, kf):
-    classifiers = {
-        # "Nearest Neighbors": KNeighborsClassifier(15),
-        # "Naive Bayes": GaussianNB(),
-        # "Decision Tree": DecisionTreeClassifier(max_depth=5),
-        # "Perceptron": Perceptron(n_iter=50),
-        # "Linear SVM OVO": SVC(kernel="linear", C=1),
-        # "Linear SVM OVR": LinearSVC(C=1),
-        "Random Forest": RandomForestClassifier(n_estimators=3)
-    }
     res = {}
     for name, clf in classifiers.iteritems():
         score_sum = 0
@@ -219,27 +220,25 @@ def wrappersTest(X, Y, kf):
     return res
 
 
-def evaulate_features(_df, Y, similar_features):
+def evaulate_features(_df, Y, test_for_remove_features):
     n_folds = 5
-    kf = KFold(n=len(_df), n_folds=n_folds)
+    kf = KFold(n=len(_df), n_folds=n_folds, shuffle=True)
 
     res = {}
-    print 'Wrappers score with all selected features:'
+    # Wrappers score with all selected features:
     res['all'] = wrappersTest(_df.values, Y, kf)
 
-    # print 'Wrappers score without similar_features:'
-    # res['withou similar_features'] = wrappersTest(_df[FEATURES_TO_KEEP].drop(similar_features, axis=1).values, Y, kf)
-    #
-    # for s in similar_features:
-    #     print 'Wrappers score without ' + str(s) + ':'
-    #     res[s] = wrappersTest(_df[FEATURES_TO_KEEP].drop(s, axis=1).values, Y, kf)
-    #
-    # print pd.DataFrame.from_dict(res)
-    return res
+    # Wrappers score without similar_features:
+    res['without similar_features'] = wrappersTest(_df.drop(test_for_remove_features, axis=1).values, Y, kf)
 
+    for s in test_for_remove_features:
+        # Wrappers score without s
+        res['without s'] = wrappersTest(_df.drop(s, axis=1).values, Y, kf)
 
-def SFS(df, label, classifier, max_out_size, n_folds=5):
-    kf = KFold(n=len(df), n_folds=n_folds)
+    print pd.DataFrame.from_dict(res)
+
+def SFS(df, label, classifier, max_out_size = 15, n_folds=5, min_improve = 0.001):
+    kf = KFold(n=len(df), n_folds=n_folds, shuffle=True)
     labels = df[label].values
     selected_features = []
     not_selected_features = list(df.columns)
@@ -252,8 +251,8 @@ def SFS(df, label, classifier, max_out_size, n_folds=5):
             if score > max:
                 max = score
                 best_feature = feature
-        if max < last_score:
-            print 'no improvemant by adding any feature'
+        if max - last_score < min_improve:
+            print 'not enough improvemant by adding any feature'
             break
         selected_features.append(best_feature)
         not_selected_features.remove(best_feature)
@@ -303,6 +302,62 @@ def find_most_correlated(df, features):
     else:
         return None
 
+def drop_redundant_numeric_features(df, all_features, categorical_features, continuous_features, discrete_features,
+                            numeric_features):
+    most_correlated = find_most_correlated(df.dropna(), numeric_features)
+    while most_correlated is not None:
+        feature1, feature2, cof = most_correlated
+        if cof < 0.95:
+            break
+        # feature1, feature2 = feature2, feature1
+        print feature1 + " and " + feature2 + " are correlated by " + str(
+            cof) + ". Filling missing values and dropping " + feature2
+        fill_f1_by_f2(df, feature2, feature1)
+        df.drop(feature2, axis=1, inplace=True)
+        for x in [all_features, discrete_features, continuous_features, categorical_features, numeric_features]:
+            if feature2 in x:
+                x.remove(feature2)
+        most_correlated = find_most_correlated(df.dropna(), numeric_features)
+
+def drop_redundant_discrete_features(df, all_features, categorical_features, continuous_features, discrete_features,
+                            numeric_features):
+    found=True
+    while found:
+        found = detect_single_redundant_discrete_feature(all_features, categorical_features, continuous_features, df,
+                                                         discrete_features, numeric_features)
+
+
+def detect_single_redundant_discrete_feature(all_features, categorical_features, continuous_features, df,
+                                             discrete_features, numeric_features):
+    df_nonan = df.dropna()
+    for i in xrange(0, len(discrete_features)):
+        f1 = discrete_features[i]
+        for j in xrange(i + 1, len(discrete_features)):
+            f2 = discrete_features[j]
+            if f1_determine_f2(df_nonan, f1, f2) and f1_determine_f2(df_nonan, f2, f1):
+                f2_to_f1_values = {}
+                rows_to_complete = df[f1].isnull() & df[f2].notnull()
+                for f1_value in df_nonan[f1].unique():
+                    f2_to_f1_values[df_nonan[f2][df_nonan[f1] == f1_value].unique()[0]] = f1_value
+                df[f1][rows_to_complete] = df[f2][rows_to_complete].map(f2_to_f1_values)
+                print 'Dropping ' + f2 + " because it's equivalent to " + f1
+                df.drop(f2, axis=1, inplace=True)
+                for x in [all_features, discrete_features, continuous_features, categorical_features, numeric_features]:
+                    if f2 in x:
+                        x.remove(f2)
+                return True
+    return False
+
+
+def f1_determine_f2(df_nonan, f1, f2):
+    f1_values = df_nonan[f1].unique()
+    flag = True
+    for f1_value in f1_values:
+        if len(df_nonan[f2][df_nonan[f1] == f1_value].unique()) > 1:
+            flag = False
+            break
+    return flag
+
 
 ###############################################################################
 ########################### MAIN ##############################################
@@ -310,13 +365,24 @@ def find_most_correlated(df, features):
 
 def main():
     df = pd.read_csv('dataset/ElectionsData.csv')
+    df['split'] = 'train'
+    indices = KFold(n=len(df), n_folds=5, shuffle=True)._iter_test_indices()
+    df['split'][indices.next()] = 'test'
+    df['split'][indices.next()] = 'validation'
+    raw_data = df.copy()
+
+    raw_data[raw_data['split']=='train'].to_csv('raw_train.csv')
+    raw_data[raw_data['split']=='test'].to_csv('raw_test.csv')
+    raw_data[raw_data['split']=='validation'].to_csv('raw_validation.csv')
 
     all_features, discrete_features, continuous_features, categorical_features, numeric_features = split_features_by_type(df)
     features_to_keep = set()
     df = mark_negative_values_as_nan(df)
     df = outlier_detection(df, continuous_features)
     df = categorical_features_transformation(df)
-    drop_redundant_features(df, all_features, categorical_features, continuous_features, discrete_features,
+    drop_redundant_discrete_features(df, all_features, categorical_features, continuous_features, discrete_features,
+                            numeric_features)
+    drop_redundant_numeric_features(df, all_features, categorical_features, continuous_features, discrete_features,
                             numeric_features)
     df = mark_negative_values_as_nan(df)
     reduce_last_school_grades(df)
@@ -334,43 +400,35 @@ def main():
     #since our method of dealing with the values that are still missing is quite naive, we don't want to do it before chi2 and anova or the results will get biased
     df = fill_missing_values(df, discrete_features, continuous_features)
 
-    sfs = SFS(df, 'Vote', RandomForestClassifier(n_estimators=3), 18)
-    print "features in sfs we didn't select:"
-    for f in sfs:
-        if f not in features_to_keep:
-            print f
-    print ''
-    print "features we selected and sfs didn't:"
-    for f in features_to_keep:
-        if f not in sfs:
-            print f
+    features_we_selected_not_selected_by_any_sfs = features_to_keep
+    features_to_add = set()
+    for name, clf in classifiers.iteritems():
+        print "using " + name
+        sfs = SFS(df, 'Vote', clf)
+        print "features in sfs we didn't select:"
+        features_we_selected_not_selected_by_any_sfs.difference(sfs)
+        for f in sfs:
+            if f not in features_to_keep:
+                print f
+                #in the spirit of taking a conservative aproach for feature selection, we'll add to our selected feature the feature selected by sfs.
+                features_to_add.add(f)
+        print "features we selected and sfs didn't:"
+        for f in features_to_keep:
+            if f not in sfs:
+                print f
 
-    #in the spirit of taking a conservative aproach for feature selection, we'll add to our selected feature the feature selected by sfs.
-    #in practice, they're already included in our selection.
-    features_to_keep = features_to_keep.union(sfs)
+    print 'adding the following features selected by sfs: ' + str(features_to_add)
+    features_to_keep = features_to_keep.union(features_to_add)
 
-    evaulate_features(df[list(features_to_keep)], df.Vote.values, [])
+    print 'evaluating features not selected by any sfs: ' + str(features_we_selected_not_selected_by_any_sfs)
+    evaulate_features(df[list(features_to_keep)], df.Vote.values, features_we_selected_not_selected_by_any_sfs)
 
-    print features_to_keep
-
-
-def drop_redundant_features(df, all_features, categorical_features, continuous_features, discrete_features,
-                            numeric_features):
-    most_correlated = find_most_correlated(df.dropna(), numeric_features)
-    while most_correlated is not None:
-        feature1, feature2, cof = most_correlated
-        if cof < 0.95:
-            break
-        # feature1, feature2 = feature2, feature1
-        print feature1 + " and " + feature2 + " are correlated by " + str(
-            cof) + ". Filling missing values and dropping " + feature2
-        fill_f1_by_f2(df, feature2, feature1)
-        df.drop(feature2, axis=1, inplace=True)
-        for x in [all_features, discrete_features, continuous_features, categorical_features, numeric_features]:
-            if feature2 in x:
-                x.remove(feature2)
-        most_correlated = find_most_correlated(df.dropna(), numeric_features)
-
+    print 'features_to_keep: ' + str(features_to_keep)
+    features_to_keep.add("Vote")
+    df=df[list(features_to_keep)]
+    df[df['split']=='train'].to_csv('transformed_train.csv')
+    df[df['split']=='test'].to_csv('transformed_test.csv')
+    df[df['split']=='validation'].to_csv('transformed_validation.csv')
 
 if __name__ == "__main__":
     main()
