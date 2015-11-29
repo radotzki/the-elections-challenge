@@ -170,7 +170,7 @@ def chi2_filter(_df, features_to_test):
 
     for c in features_to_test:
         if v[i] < alpha:
-            print c + "selected by chi2 with p-value: " + str(v[i])
+            print c + " selected by chi2 with p-value: " + str(v[i])
             ret_val.append(c)
         i += 1
 
@@ -186,7 +186,7 @@ def anova_filter(_df, features):
 
     for c in features:
         if v[i] < alpha:
-            print c + "selected by anova with p-value: " + str(v[i])
+            print c + " selected by anova with p-value: " + str(v[i])
             ret_val.add(c)
         i += 1
     return ret_val
@@ -335,6 +335,9 @@ def detect_single_redundant_discrete_feature(all_features, categorical_features,
         for j in xrange(i + 1, len(discrete_features)):
             f2 = discrete_features[j]
             if f1_determine_f2(df_nonan, f1, f2) and f1_determine_f2(df_nonan, f2, f1):
+                #going to drop f2
+                if f2 in numeric_features and f1 not in numeric_features:
+                    f1, f2 = f2, f1 # better keep a numeric value
                 f2_to_f1_values = {}
                 rows_to_complete = df[f1].isnull() & df[f2].notnull()
                 for f1_value in df_nonan[f1].unique():
