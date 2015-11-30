@@ -2,3 +2,9 @@
 .spyderworkspace
 .idea
 .ipynb_checkpoints
+dataset/transformed_test.csv
+dataset/transformed_train.csv
+dataset/transformed_validation.csv
+dataset/raw_test.csv
+dataset/raw_train.csv
+dataset/raw_validation.csv

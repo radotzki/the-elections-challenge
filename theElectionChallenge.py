@@ -33,7 +33,6 @@ def split_features_by_type(_df):
     continuous_features = array_diff(all_features, discrete_features)
     categorical_features = list(_df.keys()[_df.dtypes.map(lambda x: x == 'object')])
     categorical_features.remove("Vote")
-    categorical_features.remove("split")
     binary_features = [c for c in all_features if len(_df[c].unique()) == 2]
     numeric_features = array_diff(all_features, categorical_features) + binary_features
     return [all_features, discrete_features, continuous_features, categorical_features, numeric_features]
@@ -86,6 +85,15 @@ def fill_f1_by_f2(df, f1, f2):
     #         df[f2][i] = y_interp(df[f1][i])
     df[f1][rows_to_complete] = df[f2][rows_to_complete].map(lambda x: coefs[0] + coefs[1]*x)
 
+
+def label_encoder(df):
+    le = preprocessing.LabelEncoder()
+    le.fit(df.Vote.values)
+    df.Vote = le.transform(df.Vote.values)
+    return le
+
+def label_decoder(df, le):
+    return le.inverse_transform(df.Vote.values)
 
 def categorical_features_transformation(_df):
     # Identify which of the original features are objects
@@ -368,20 +376,21 @@ def f1_determine_f2(df_nonan, f1, f2):
 
 def main():
     df = pd.read_csv('dataset/ElectionsData.csv')
-    df['split'] = 'train'
+    df['split'] = 0
     indices = KFold(n=len(df), n_folds=5, shuffle=True)._iter_test_indices()
-    df['split'][indices.next()] = 'test'
-    df['split'][indices.next()] = 'validation'
+    df['split'][indices.next()] = 1
+    df['split'][indices.next()] = 2
     raw_data = df.copy()
 
-    raw_data[raw_data['split']=='train'].to_csv('raw_train.csv')
-    raw_data[raw_data['split']=='test'].to_csv('raw_test.csv')
-    raw_data[raw_data['split']=='validation'].to_csv('raw_validation.csv')
+    raw_data[raw_data['split']==0].drop('split', axis=1).to_csv('dataset/raw_train.csv')
+    raw_data[raw_data['split']==1].drop('split', axis=1).to_csv('dataset/raw_test.csv')
+    raw_data[raw_data['split']==2].drop('split', axis=1).to_csv('dataset/raw_validation.csv')
 
     all_features, discrete_features, continuous_features, categorical_features, numeric_features = split_features_by_type(df)
     features_to_keep = set()
     df = mark_negative_values_as_nan(df)
     df = outlier_detection(df, continuous_features)
+    lEncoder = label_encoder(df)
     df = categorical_features_transformation(df)
     drop_redundant_discrete_features(df, all_features, categorical_features, continuous_features, discrete_features,
                             numeric_features)
@@ -428,10 +437,14 @@ def main():
 
     print 'features_to_keep: ' + str(features_to_keep)
     features_to_keep.add("Vote")
+    features_to_keep.add("split")
     df=df[list(features_to_keep)]
-    df[df['split']=='train'].to_csv('transformed_train.csv')
-    df[df['split']=='test'].to_csv('transformed_test.csv')
-    df[df['split']=='validation'].to_csv('transformed_validation.csv')
+    df.Vote = label_decoder(df, lEncoder)
+    df[df['split']==0].drop('split', axis=1).to_csv('dataset/transformed_train.csv')
+    df[df['split']==1].drop('split', axis=1).to_csv('dataset/transformed_test.csv')
+    df[df['split']==2].drop('split', axis=1).to_csv('dataset/transformed_validation.csv')
+    features_to_keep.remove("Vote")
+    features_to_keep.remove("split")
 
 if __name__ == "__main__":
     main()
