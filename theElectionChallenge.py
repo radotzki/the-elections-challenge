@@ -98,7 +98,6 @@ def label_decoder(df, le):
 def categorical_features_transformation(_df):
     # Identify which of the original features are objects
     obj_feat = _df.keys()[_df.dtypes.map(lambda x: x == 'object')]
-
     # Transform the original features to categorical
     for f in obj_feat:
         _df[f] = _df[f].astype("category")
@@ -236,14 +235,16 @@ def evaulate_features(_df, Y, test_for_remove_features):
     # Wrappers score with all selected features:
     res['all'] = wrappersTest(_df.values, Y, kf)
 
-    # Wrappers score without similar_features:
+    print 'Wrappers score without test_for_remove_features:'
     res['without similar_features'] = wrappersTest(_df.drop(test_for_remove_features, axis=1).values, Y, kf)
 
     for s in test_for_remove_features:
-        # Wrappers score without s
-        res['without s'] = wrappersTest(_df.drop(s, axis=1).values, Y, kf)
+        print 'Wrappers score without ' + str(s) + ':'
+        res[s] = wrappersTest(_df.drop(s, axis=1).values, Y, kf)
 
+    print 'Scores when removing a single feature'
     print pd.DataFrame.from_dict(res)
+    return res
 
 def SFS(df, label, classifier, max_out_size = 15, n_folds=5, min_improve = 0.001):
     kf = KFold(n=len(df), n_folds=n_folds, shuffle=True)
@@ -251,6 +252,7 @@ def SFS(df, label, classifier, max_out_size = 15, n_folds=5, min_improve = 0.001
     selected_features = []
     not_selected_features = list(df.columns)
     not_selected_features.remove(label)
+    not_selected_features.remove("split")
     last_score = 0
     while len(selected_features) < max_out_size and len(not_selected_features) > 0:
         max = 0
