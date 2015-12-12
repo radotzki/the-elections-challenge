@@ -373,36 +373,48 @@ def f1_determine_f2(df_nonan, f1, f2):
 ###############################################################################
 
 def main():
-    train = pd.read_csv('dataset/transformed_train.csv')
-    test = pd.read_csv('dataset/transformed_test.csv')
-    l_encoder = pickle.load(open('encoder.pickle'))
+    df = pd.read_csv('dataset/ElectionsData.csv')
+    df['split'] = 0
+    indices = KFold(n=len(df), n_folds=5, shuffle=True)._iter_test_indices()
+    df['split'][indices.next()] = 1
+    df['split'][indices.next()] = 2
+    raw_data = df.copy()
 
-    features = list(train.columns)
-    features.remove('Vote')
-    evaluate_features(train[features], train.Vote.values)
+    raw_data[raw_data['split']==0].drop('split', axis=1).to_csv('dataset/raw_train.csv', index=False)
+    raw_data[raw_data['split']==1].drop('split', axis=1).to_csv('dataset/raw_test.csv', index=False)
+    raw_data[raw_data['split']==2].drop('split', axis=1).to_csv('dataset/raw_validation.csv', index=False)
 
-    for name, classifier in classifiers.iteritems():
-        classifier.fit(train[list(features_to_keep)], train.Vote.values)
-        print name + " score: " + str(classifier.score(test[list(features_to_keep)], test.Vote.values))
-        confusion = defaultdict(lambda: defaultdict(int))
-        for i, row in test.iterrows():
-            prediction = l_encoder.inverse_transform(classifier.predict(row.drop('Vote'))[0])
-            actual = l_encoder.inverse_transform(int(row['Vote']))
-            confusion[prediction][actual] += 1
-        print 'Confusion table:'
-        print '      |predicted'
-        print '----------------'
-        print 'actual|'
-        print ''
-        print pd.DataFrame.from_dict(confusion).fillna(0)
+    all_features, discrete_features, continuous_features, categorical_features, numeric_features = split_features_by_type(df)
+    features_to_keep = set(['Yearly_ExpensesK', 'Yearly_IncomeK', 'Overall_happiness_score', 'Most_Important_Issue',
+                           'Avg_Residancy_Altitude', 'Will_vote_only_large_party', 'Financial_agenda_matters'])
+    df = mark_negative_values_as_nan(df)
+    df = outlier_detection(df, continuous_features)
 
-        print 'min sensitivity: ' + str(min(float(actual[prediction]) / sum(x[prediction] for x in confusion.itervalues()) for prediction, actual in confusion.iteritems()))
-        print 'min percision: ' + str(min(float(actual[prediction]) / sum(actual.values()) for prediction, actual in confusion.iteritems()))
+    #fill missing values by correlated features.
+    fill_f1_by_f2_linear(df, 'Yearly_ExpensesK', 'Avg_monthly_expense_on_pets_or_plants')
+    fill_f1_by_f2_linear(df, 'Yearly_IncomeK', 'Avg_size_per_room')
+    fill_f1_by_f2_linear(df, 'Overall_happiness_score', 'Political_interest_Total_Score') #not perfectly corelated, but better then nothing
+    fill_f1_by_f2_discrete(df, 'Most_Important_Issue', 'Last_school_grades')
+    fill_f1_by_f2_linear(df, 'Avg_Residancy_Altitude', 'Avg_monthly_expense_when_under_age_21')
+    fill_f1_by_f2_discrete(df, 'Will_vote_only_large_party', 'Looking_at_poles_results')
+    fill_f1_by_f2_discrete(df, 'Financial_agenda_matters', 'Vote')
 
+    for c in features_to_keep:
+        rows_to_fix = df[c].isnull()
+        for row, value in enumerate(rows_to_fix):
+            if value:
+                df[c][row] = df[df.Vote==df.Vote[row]][c].mean()
 
-    df.Vote = label_decoder(df, l_encoder)
-    # features_to_keep.remove("Vote")
-    # features_to_keep.remove("split")
+    df=df[list(features_to_keep)+['Vote', 'split']]
+    reduce_Most_Important_Issue(df)
+
+    l_encoder = label_encoder(df)
+    df = categorical_features_transformation(df)
+    pickle.dump(l_encoder, open('encoder.pickle', 'w'))
+    df[df['split'] == 0].drop('split', axis=1).to_csv('dataset/transformed_train.csv', index=False)
+    df[df['split'] == 1].drop('split', axis=1).to_csv('dataset/transformed_test.csv', index=False)
+    df[df['split']==2].drop('split', axis=1).to_csv('dataset/transformed_validation.csv', index=False)
+
 
 if __name__ == "__main__":
     main()
