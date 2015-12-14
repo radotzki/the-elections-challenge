@@ -7,6 +7,7 @@ from collections import defaultdict
 import numpy as np
 from numpy.linalg import lstsq
 import pickle
+import operator
 from sklearn.preprocessing import Imputer, MinMaxScaler
 from scipy.stats import norm, kstest
 from sklearn import preprocessing
@@ -20,6 +21,13 @@ from sklearn.svm import LinearSVC, SVC
 import pandas as pd
 import scipy
 import scipy.interpolate
+
+classifiers = {
+    "Decision Tree 10": DecisionTreeClassifier(max_depth=10),
+    "Perceptron  100": Perceptron(n_iter=100),
+    "Linear SVM OVO": SVC(kernel="linear", C=1),
+    # "Linear SVM OVR": LinearSVC(C=1),
+}
 
 
 def array_diff(a, b):
@@ -67,10 +75,11 @@ def outlier_detection(_df, features):
         _df[f] = _df[f].map(lambda x: x if np.abs(x - mean) <= (3 * std) else np.nan)
     return _df
 
+
 def find_coefficients(Xs, Ys, exponents):
-    X = tuple((tuple((pow(x,p) for p in exponents)) for x in Xs))
+    X = tuple((tuple((pow(x, p) for p in exponents)) for x in Xs))
     y = tuple(((y) for y in Ys))
-    x, resids, rank, s = lstsq(X,y)
+    x, resids, rank, s = lstsq(X, y)
     return x
 
 
@@ -78,14 +87,14 @@ def fill_f1_by_f2_linear(df, f1, f2):
     rows_to_complete = df[f1].isnull() & df[f2].notnull()
 
     df_dropna = df[[f1, f2]].dropna()
-    coefs = find_coefficients(df_dropna[f2],df_dropna[f1],range(2)) #linear approximation
+    coefs = find_coefficients(df_dropna[f2], df_dropna[f1], range(2))  # linear approximation
     # for i, row in df.iterrows():
     #     if rows_to_complete[i]:
     #         x=df[f1][i]
     #         print x
     #         print y_interp(x)
     #         df[f2][i] = y_interp(df[f1][i])
-    df[f1][rows_to_complete] = df[f2][rows_to_complete].map(lambda x: coefs[0] + coefs[1]*x)
+    df[f1][rows_to_complete] = df[f2][rows_to_complete].map(lambda x: coefs[0] + coefs[1] * x)
 
 
 def label_encoder(df):
@@ -94,8 +103,10 @@ def label_encoder(df):
     df.Vote = le.transform(df.Vote.values)
     return le
 
+
 def label_decoder(df, le):
     return le.inverse_transform(df.Vote.values)
+
 
 def categorical_features_transformation(_df):
     # Identify which of the original features are objects
@@ -145,7 +156,8 @@ def uniform_to_normal(df, continuous_features):
     for f in uniform:
         min = 0 if f in zero_to_one or f in zero_to_ten or f in zero_to_hundred else df[f].min()
         max = 1 if f in zero_to_one else (10 if f in zero_to_ten else 100 if f in zero_to_hundred else df[f].max())
-        df[f] = df[f].map(lambda x: norm.ppf((x - min) / (max - min))) # we could use df_scaled but this should give us better results since what we think are the actual min and max, and not the observed min and max
+        df[f] = df[f].map(lambda x: norm.ppf((x - min) / (
+            max - min)))  # we could use df_scaled but this should give us better results since what we think are the actual min and max, and not the observed min and max
 
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df.dropna(inplace=True)
@@ -186,7 +198,7 @@ def chi2_filter(_df, features_to_test):
 
 
 def anova_filter(_df, features):
-    ret_val=set()
+    ret_val = set()
     X = _df[features].values
     Y = _df.Vote.values
     v = f_classif(X, Y)[1]
@@ -204,20 +216,12 @@ def anova_filter(_df, features):
 ########################### Wrappers ##########################################
 ###############################################################################
 
-classifiers = {
-    # "Nearest Neighbors": KNeighborsClassifier(15),
-    "Decision Tree 10": DecisionTreeClassifier(max_depth=10),
-    "Perceptron 20": Perceptron(n_iter=20),
-    "Linear SVM OVO": SVC(kernel="linear", C=1),
-    "Linear SVM OVR": LinearSVC(C=1),
-    # "Random Forest": RandomForestClassifier(n_estimators=3)
-}
 
 def wrappersTest(X, Y, kf):
     res = {}
     for name, clf in classifiers.iteritems():
         score_sum = 0
-        print 'start ' + str(name) + ' test..'
+        # print 'start ' + str(name) + ' test..'
         for k, (train_index, test_index) in enumerate(kf):
             clf.fit(X[train_index], Y[train_index])
             acc = clf.score(X[test_index], Y[test_index])
@@ -237,7 +241,8 @@ def evaluate_features(_df, Y):
     print pd.DataFrame.from_dict(res)
     return res
 
-def SFS(df, label, classifier, max_out_size = 15, n_folds=5, min_improve = 0.001):
+
+def SFS(df, label, classifier, max_out_size=15, n_folds=5, min_improve=0.001):
     kf = KFold(n=len(df), n_folds=n_folds, shuffle=True)
     labels = df[label].values
     selected_features = []
@@ -276,14 +281,14 @@ def find_most_correlated(df, features, feature_to_compare):
     votes.sort()
     max_cor = 0
     for j in xrange(0, len(features)):
-        if (features[j]==feature_to_compare):
+        if (features[j] == feature_to_compare):
             continue
         pearsonr = scipy.stats.pearsonr(df[feature_to_compare], df[features[j]])
         if pearsonr[1] < alpha:
             cor = abs(pearsonr[0])
             if cor == 1:
                 return [feature_to_compare, features[j], 1]
-            #let's check the correlation in each label separatly, and use the minimum
+            # let's check the correlation in each label separatly, and use the minimum
             # min_per_label_cor = 1
             # for vote in votes:
             #     per_label_pearson = scipy.stats.pearsonr(df[df.Vote == vote][feature_to_compare],
@@ -303,8 +308,9 @@ def find_most_correlated(df, features, feature_to_compare):
     else:
         return None
 
+
 def drop_redundant_numeric_features(df, all_features, categorical_features, continuous_features, discrete_features,
-                            numeric_features):
+                                    numeric_features):
     most_correlated = find_most_correlated(df.dropna(), numeric_features)
     while most_correlated is not None:
         feature1, feature2, cof = most_correlated
@@ -320,9 +326,10 @@ def drop_redundant_numeric_features(df, all_features, categorical_features, cont
                 x.remove(feature2)
         most_correlated = find_most_correlated(df.dropna(), numeric_features)
 
+
 def drop_redundant_discrete_features(df, all_features, categorical_features, continuous_features, discrete_features,
-                            numeric_features):
-    found=True
+                                     numeric_features):
+    found = True
     while found:
         found = detect_single_redundant_discrete_feature(all_features, categorical_features, continuous_features, df,
                                                          discrete_features, numeric_features)
@@ -336,9 +343,9 @@ def detect_single_redundant_discrete_feature(all_features, categorical_features,
         for j in xrange(i + 1, len(discrete_features)):
             f2 = discrete_features[j]
             if f1_determine_f2(df_nonan, f1, f2) and f1_determine_f2(df_nonan, f2, f1):
-                #going to drop f2
+                # going to drop f2
                 if f2 in numeric_features and f1 not in numeric_features:
-                    f1, f2 = f2, f1 # better keep a numeric value
+                    f1, f2 = f2, f1  # better keep a numeric value
                 fill_f1_by_f2_discrete(df, f1, f2)
                 print 'Dropping ' + f2 + " because it's equivalent to " + f1
                 df.drop(f2, axis=1, inplace=True)
@@ -372,6 +379,26 @@ def f1_determine_f2(df_nonan, f1, f2):
 ########################### MAIN ##############################################
 ###############################################################################
 
+class MyClassifier(object):
+    def __init__(self, scored_classifiers):
+        self.scored_classifiers = scored_classifiers
+
+    def predict(self, vector):
+        prediction_scores = defaultdict(float)
+        for classifier, score in self.scored_classifiers.iteritems():
+            prediction_scores[classifier.predict(vector)[0]] += score
+        return max(prediction_scores.iteritems(), key=operator.itemgetter(1))
+
+    def score(self, X, y):
+        right = 0.
+        for i, row in X.iterrows():
+            if self.predict(row)[0] == y[i]:
+                right += 1
+        return right / len(y)
+
+    def fit(self, X, y):
+        pass
+
 def main():
     train = pd.read_csv('dataset/transformed_train.csv')
     test = pd.read_csv('dataset/transformed_test.csv')
@@ -379,30 +406,44 @@ def main():
 
     features = list(train.columns)
     features.remove('Vote')
-    evaluate_features(train[features], train.Vote.values)
-
+    # evaluate_features(train[features], train.Vote.values)
+    scored_classifiers = dict()
     for name, classifier in classifiers.iteritems():
-        classifier.fit(train[list(features_to_keep)], train.Vote.values)
-        print name + " score: " + str(classifier.score(test[list(features_to_keep)], test.Vote.values))
-        confusion = defaultdict(lambda: defaultdict(int))
-        for i, row in test.iterrows():
-            prediction = l_encoder.inverse_transform(classifier.predict(row.drop('Vote'))[0])
-            actual = l_encoder.inverse_transform(int(row['Vote']))
-            confusion[prediction][actual] += 1
-        print 'Confusion table:'
-        print '      |predicted'
-        print '----------------'
-        print 'actual|'
-        print ''
-        print pd.DataFrame.from_dict(confusion).fillna(0)
+        evaluate_classifier_against_test(classifier, features, l_encoder, name, scored_classifiers, test, train)
 
-        print 'min sensitivity: ' + str(min(float(actual[prediction]) / sum(x[prediction] for x in confusion.itervalues()) for prediction, actual in confusion.iteritems()))
-        print 'min percision: ' + str(min(float(actual[prediction]) / sum(actual.values()) for prediction, actual in confusion.iteritems()))
+    classifier = MyClassifier(scored_classifiers.copy())
+    evaluate_classifier_against_test(classifier, features, l_encoder, 'Custom classifier', scored_classifiers, test, train)
 
-
-    df.Vote = label_decoder(df, l_encoder)
+    # df.Vote = label_decoder(df, l_encoder)
     # features_to_keep.remove("Vote")
     # features_to_keep.remove("split")
+
+
+def evaluate_classifier_against_test(classifier, features, l_encoder, name, scored_classifiers, test, train):
+    classifier.fit(train[list(features)], train.Vote.values)
+    score = classifier.score(test[list(features)], test.Vote.values)
+    print name + " score: " + str(score)
+    scored_classifiers[classifier] = score
+    confusion = defaultdict(lambda: defaultdict(int))
+    for i, row in test.iterrows():
+        prediction = l_encoder.inverse_transform(classifier.predict(row.drop('Vote'))[0])
+        actual = l_encoder.inverse_transform(int(row['Vote']))
+        confusion[prediction][actual] += 1
+    print 'Confusion table:'
+    print '      |predicted'
+    print '----------------'
+    print 'actual|'
+    print ''
+    print pd.DataFrame.from_dict(confusion).fillna(0)
+    print 'min sensitivity: ' + str(min(
+        float(actual[prediction]) / sum(x[prediction] for x in confusion.itervalues()) for prediction, actual in
+        confusion.iteritems()))
+    print 'min percision: ' + str(
+        min(float(actual[prediction]) / sum(actual.values()) for prediction, actual in confusion.iteritems()))
+    print ''
+    print '--------------------------------------------------------------------------------------------------'
+    print ''
+
 
 if __name__ == "__main__":
     main()

@@ -4,6 +4,7 @@
 ################## Data preparation ###########################################
 ###############################################################################
 from collections import defaultdict
+import math
 import numpy as np
 from numpy.linalg import lstsq
 import pickle
@@ -385,8 +386,8 @@ def main():
     raw_data[raw_data['split']==2].drop('split', axis=1).to_csv('dataset/raw_validation.csv', index=False)
 
     all_features, discrete_features, continuous_features, categorical_features, numeric_features = split_features_by_type(df)
-    features_to_keep = set(['Yearly_ExpensesK', 'Yearly_IncomeK', 'Overall_happiness_score', 'Most_Important_Issue',
-                           'Avg_Residancy_Altitude', 'Will_vote_only_large_party', 'Financial_agenda_matters'])
+    features_to_keep = {'Yearly_ExpensesK', 'Yearly_IncomeK', 'Overall_happiness_score', 'Most_Important_Issue',
+                        'Avg_Residancy_Altitude', 'Will_vote_only_large_party', 'Financial_agenda_matters'}
     df = mark_negative_values_as_nan(df)
     df = outlier_detection(df, continuous_features)
 
@@ -398,7 +399,6 @@ def main():
     fill_f1_by_f2_linear(df, 'Avg_Residancy_Altitude', 'Avg_monthly_expense_when_under_age_21')
     fill_f1_by_f2_discrete(df, 'Will_vote_only_large_party', 'Looking_at_poles_results')
     fill_f1_by_f2_discrete(df, 'Financial_agenda_matters', 'Vote')
-
     for c in features_to_keep:
         rows_to_fix = df[c].isnull()
         for row, value in enumerate(rows_to_fix):
@@ -407,9 +407,10 @@ def main():
 
     df=df[list(features_to_keep)+['Vote', 'split']]
     reduce_Most_Important_Issue(df)
-
+    z_score_scaling(df, list(features_to_keep.intersection(set(continuous_features))))
     l_encoder = label_encoder(df)
     df = categorical_features_transformation(df)
+
     pickle.dump(l_encoder, open('encoder.pickle', 'w'))
     df[df['split'] == 0].drop('split', axis=1).to_csv('dataset/transformed_train.csv', index=False)
     df[df['split'] == 1].drop('split', axis=1).to_csv('dataset/transformed_test.csv', index=False)
