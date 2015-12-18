@@ -234,12 +234,7 @@ def wrappersTest(X, Y, kf):
 def evaluate_features(_df, Y):
     n_folds = 5
     kf = KFold(n=len(_df), n_folds=n_folds, shuffle=True)
-
-    res = {}
-    # Wrappers score with all selected features:
-    res['all'] = wrappersTest(_df.values, Y, kf)
-    print pd.DataFrame.from_dict(res)
-    return res
+    wrappersTest(_df.values, Y, kf)
 
 
 def SFS(df, label, classifier, max_out_size=15, n_folds=5, min_improve=0.001):
@@ -383,40 +378,24 @@ class MyClassifier(object):
     def __init__(self, scored_classifiers):
         self.scored_classifiers = scored_classifiers
 
-    def predict(self, vector):
-        prediction_scores = defaultdict(float)
+    def predict(self, X):
+        prediction_scores = defaultdict(lambda: defaultdict(float))
         for classifier, score in self.scored_classifiers.iteritems():
-            prediction_scores[classifier.predict(vector)[0]] += score
-        return max(prediction_scores.iteritems(), key=operator.itemgetter(1))
+            predictions = classifier.predict(X)
+            for i in xrange(len(X)):
+                prediction_scores[i][predictions[i]] += score
+        return [max(row_scores.iteritems(), key=operator.itemgetter(1))[0] for row_scores in prediction_scores.itervalues()]
 
     def score(self, X, y):
         right = 0.
+        predictions = self.predict(X)
         for i, row in X.iterrows():
-            if self.predict(row)[0] == y[i]:
+            if predictions[i] == y[i]:
                 right += 1
         return right / len(y)
 
     def fit(self, X, y):
         pass
-
-def main():
-    train = pd.read_csv('dataset/transformed_train.csv')
-    test = pd.read_csv('dataset/transformed_test.csv')
-    l_encoder = pickle.load(open('encoder.pickle'))
-
-    features = list(train.columns)
-    features.remove('Vote')
-    # evaluate_features(train[features], train.Vote.values)
-    scored_classifiers = dict()
-    for name, classifier in classifiers.iteritems():
-        evaluate_classifier_against_test(classifier, features, l_encoder, name, scored_classifiers, test, train)
-
-    classifier = MyClassifier(scored_classifiers.copy())
-    evaluate_classifier_against_test(classifier, features, l_encoder, 'Custom classifier', scored_classifiers, test, train)
-
-    # df.Vote = label_decoder(df, l_encoder)
-    # features_to_keep.remove("Vote")
-    # features_to_keep.remove("split")
 
 
 def evaluate_classifier_against_test(classifier, features, l_encoder, name, scored_classifiers, test, train):
@@ -425,10 +404,11 @@ def evaluate_classifier_against_test(classifier, features, l_encoder, name, scor
     print name + " score: " + str(score)
     scored_classifiers[classifier] = score
     confusion = defaultdict(lambda: defaultdict(int))
-    for i, row in test.iterrows():
-        prediction = l_encoder.inverse_transform(classifier.predict(row.drop('Vote'))[0])
-        actual = l_encoder.inverse_transform(int(row['Vote']))
-        confusion[prediction][actual] += 1
+    predictions = l_encoder.inverse_transform(classifier.predict(test.drop('Vote', axis=1)))
+    actuals = l_encoder.inverse_transform(test['Vote'])
+
+    for i in xrange(len(test)):
+        confusion[predictions[i]][actuals[i]] += 1
     print 'Confusion table:'
     print '      |predicted'
     print '----------------'
@@ -443,6 +423,29 @@ def evaluate_classifier_against_test(classifier, features, l_encoder, name, scor
     print ''
     print '--------------------------------------------------------------------------------------------------'
     print ''
+
+
+def main():
+    train = pd.read_csv('dataset/transformed_train.csv')
+    test = pd.read_csv('dataset/transformed_test.csv')
+    l_encoder = pickle.load(open('encoder.pickle'))
+
+    features = list(train.columns)
+    features.remove('Vote')
+    print 'Cross validation scores:'
+    evaluate_features(train[features], train.Vote.values)
+    scored_classifiers = dict()
+    print 'Evaluating against the test set:'
+    for name, classifier in classifiers.iteritems():
+        evaluate_classifier_against_test(classifier, features, l_encoder, name, scored_classifiers, test, train)
+
+    classifier = MyClassifier(scored_classifiers.copy())
+    evaluate_classifier_against_test(classifier, features, l_encoder, 'Custom classifier', scored_classifiers, test, train)
+
+    best_classifier = max(scored_classifiers.iteritems(), key=operator.itemgetter(1))[0]
+    test['prediction'] = l_encoder.inverse_transform(best_classifier.predict(test.drop('Vote', axis=1)))
+    test['Vote'] = l_encoder.inverse_transform(test['Vote'])
+    test.to_csv('dataset/test_predictions.csv', index=False)
 
 
 if __name__ == "__main__":
