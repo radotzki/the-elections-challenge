@@ -22,7 +22,7 @@ import pandas as pd
 import scipy
 import scipy.interpolate
 
-classifiers = {
+CLASSIFIERS = {
     "Decision Tree 10": DecisionTreeClassifier(max_depth=10),
     "Perceptron  100": Perceptron(n_iter=100),
     "Linear SVM OVO": SVC(kernel="linear", C=1, probability=True),
@@ -217,8 +217,8 @@ def anova_filter(_df, features):
 ###############################################################################
 
 
-def wrappersTest(X, Y, kf):
-    res = {}
+def evaluate_classifiers(X, Y, kf, classifiers):
+    scores = {}
     for name, clf in classifiers.iteritems():
         score_sum = 0
         # print 'start ' + str(name) + ' test..'
@@ -227,14 +227,14 @@ def wrappersTest(X, Y, kf):
             acc = clf.score(X[test_index], Y[test_index])
             score_sum += acc
         print("{0} average score: {1:.5}".format(name, score_sum / kf.n_folds))
-        res[name] = score_sum / kf.n_folds
-    return res
+        scores[name] = score_sum / kf.n_folds
+    return scores
 
 
-def evaluate_features(_df, Y):
+def cross_validation(_df, Y, classifiers):
     n_folds = 5
     kf = KFold(n=len(_df), n_folds=n_folds, shuffle=True)
-    wrappersTest(_df.values, Y, kf)
+    return evaluate_classifiers(_df.values, Y, kf, classifiers)
 
 
 def SFS(df, label, classifier, max_out_size=15, n_folds=5, min_improve=0.001):
@@ -375,70 +375,58 @@ def f1_determine_f2(df_nonan, f1, f2):
 ###############################################################################
 
 class MyClassifier(object):
-    def __init__(self, scored_classifiers):
-        self.scored_classifiers = scored_classifiers
+    def __init__(self, classifiers, scores):
+        self.scores = scores
+        self.classifiers = classifiers
 
     def predict(self, X):
         prediction_scores = defaultdict(lambda: defaultdict(float))
-        for classifier, score in self.scored_classifiers.iteritems():
+        for name, classifier in self.classifiers.iteritems():
             predictions = classifier.predict(X)
             for i in xrange(len(X)):
-                prediction_scores[i][predictions[i]] += score
+                prediction_scores[i][predictions[i]] += self.scores[name]
         return [max(row_scores.iteritems(), key=operator.itemgetter(1))[0] for row_scores in prediction_scores.itervalues()]
 
     def score(self, X, y):
         right = 0.
         predictions = self.predict(X)
-        for i, row in X.iterrows():
+        for i in xrange(len(X)):
             if predictions[i] == y[i]:
                 right += 1
         return right / len(y)
 
     def fit(self, X, y):
-        pass
+        for classifier in self.classifiers.itervalues():
+            classifier.fit(X, y)
 
-class MyClassifier2(object):
-    def __init__(self, scored_classifiers):
-        self.scored_classifiers = scored_classifiers
 
+class MyClassifier2(MyClassifier):
     def predict(self, X):
         proba=self.predict_proba(X)
         return [max(row_scores.iteritems(), key=operator.itemgetter(1))[0] for row_num, row_scores in proba.iterrows()]
 
     def predict_proba(self, X):
         prediction_scores = defaultdict(lambda: defaultdict(float))
-        for classifier, score in self.scored_classifiers.iteritems():
+        for name, classifier in self.classifiers.iteritems():
             if hasattr(classifier, 'predict_proba'):
                 predictions = classifier.predict_proba(X)
                 for row_num in xrange(len(X)):
                     for i in xrange(len(predictions[row_num])):
-                        prediction_scores[row_num][i] += predictions[row_num][i]*score
+                        prediction_scores[row_num][i] += predictions[row_num][i]*self.scores[name]
             # else:
             #     predictions = classifier.predict(X)
             #     for row_num in xrange(len(X)):
-            #         prediction_scores[row_num][predictions[row_num]] += score
+            #         prediction_scores[row_num][predictions[row_num]] += self.scores[name]
 
         ret_val = pd.DataFrame(prediction_scores)
         ret_val = ret_val/ret_val.sum()
         return ret_val.transpose()
 
-    def score(self, X, y):
-        right = 0.
-        predictions = self.predict(X)
-        for i, row in X.iterrows():
-            if predictions[i] == y[i]:
-                right += 1
-        return right / len(y)
 
-    def fit(self, X, y):
-        pass
-
-
-def evaluate_classifier_against_test(classifier, features, l_encoder, name, scored_classifiers, test, train):
+def evaluate_classifier_against_test(classifier, features, l_encoder, name, test, train):
     classifier.fit(train[list(features)], train.Vote.values)
     score = classifier.score(test[list(features)], test.Vote.values)
     print name + " score: " + str(score)
-    scored_classifiers[classifier] = score
     confusion = defaultdict(lambda: defaultdict(int))
     predictions = l_encoder.inverse_transform(classifier.predict(test.drop('Vote', axis=1)))
     actuals = l_encoder.inverse_transform(test['Vote'])
@@ -454,8 +442,18 @@ def evaluate_classifier_against_test(classifier, features, l_encoder, name, scor
     print 'min sensitivity: ' + str(min(
         float(actual[prediction]) / sum(x[prediction] for x in confusion.itervalues()) for prediction, actual in
         confusion.iteritems()))
+    print 'avg sensitivity: ' + str(sum(
+        float(actual[prediction]) / sum(x[prediction] for x in confusion.itervalues()) for prediction, actual in
+        confusion.iteritems())/len(confusion))
+    print 'max sensitivity: ' + str(max(
+        float(actual[prediction]) / sum(x[prediction] for x in confusion.itervalues()) for prediction, actual in
+        confusion.iteritems()))
     print 'min precision: ' + str(
         min(float(actual[prediction]) / sum(actual.values()) for prediction, actual in confusion.iteritems()))
+    print 'avg precision: ' + str(
+        sum(float(actual[prediction]) / sum(actual.values()) for prediction, actual in confusion.iteritems())/len(confusion))
+    print 'max precision: ' + str(
+        max(float(actual[prediction]) / sum(actual.values()) for prediction, actual in confusion.iteritems()))
     print ''
     print '--------------------------------------------------------------------------------------------------'
     print ''
@@ -468,65 +466,20 @@ def main():
 
     features = list(train.columns)
     features.remove('Vote')
-    # print 'Cross validation scores:'
-    # evaluate_features(train[features], train.Vote.values)
-    scored_classifiers = dict()
-    print 'Evaluating against the test set:'
-    for name, classifier in classifiers.iteritems():
-        evaluate_classifier_against_test(classifier, features, l_encoder, name, scored_classifiers, test, train)
+    print 'Cross validation scores:'
+    scores = cross_validation(train[features], train.Vote.values, CLASSIFIERS)
+    my_classifiers = {'My classifier': MyClassifier(CLASSIFIERS, scores), 'My classifier 2': MyClassifier2(CLASSIFIERS, scores)}
+    cross_validation(train[features], train.Vote.values, my_classifiers)
 
-    classifier = MyClassifier(scored_classifiers.copy())
-    evaluate_classifier_against_test(classifier, features, l_encoder, 'Custom classifier', scored_classifiers, test, train)
+    best_classifier_name = max(scores.iteritems(), key=operator.itemgetter(1))[0]
 
-    classifier = MyClassifier2(scored_classifiers.copy())
-    evaluate_classifier_against_test(classifier, features, l_encoder, 'Custom classifier 2', scored_classifiers, test, train)
+    print 'Evaluating ' + best_classifier_name + ' against the test set:'
+    evaluate_classifier_against_test(CLASSIFIERS[best_classifier_name], features, l_encoder, best_classifier_name, test, train)
 
-    best_classifier = max(scored_classifiers.iteritems(), key=operator.itemgetter(1))[0]
-    test['prediction'] = l_encoder.inverse_transform(best_classifier.predict(test.drop('Vote', axis=1)))
+    test['prediction'] = l_encoder.inverse_transform(CLASSIFIERS[best_classifier_name].predict(test.drop('Vote', axis=1)))
     test['Vote'] = l_encoder.inverse_transform(test['Vote'])
     test.to_csv('dataset/test_predictions.csv', index=False)
 
-
-###############################################################################
-################## Division of voters ##########################################
-###############################################################################
-
-    test.drop('prediction', axis=1, inplace=True)
-    counts = pd.DataFrame()
-    counts['real'] = test.Vote.value_counts()
-    best_prediction_error = len(test)*2  # max possible value
-
-    for classifier in scored_classifiers.iterkeys():
-        print classifier.__class__.__name__
-        classifier.fit(train.drop('Vote', axis=1), train.Vote.values)
-        print 'Division of voters by label prediction:'
-        counts['predicted'] = pd.Series(l_encoder.inverse_transform(classifier.predict(test.drop('Vote', axis=1)))).value_counts()
-        counts['difference'] = counts.real - counts.predicted
-        print counts
-        total_error = counts.difference.abs().sum()
-        if total_error<best_prediction_error:
-            best_prediction_error=total_error
-            best_prediction = counts.copy(True)
-        print 'Total error: ' + str(total_error)
-
-        if hasattr(classifier, 'predict_proba'):
-            print 'Division of voters by probabilistic prediction:'
-            proba = pd.DataFrame(classifier.predict_proba(test.drop('Vote', axis=1)))
-            proba.columns = l_encoder.classes_
-            counts['predicted'] = proba.sum()
-            counts['difference'] = counts.real - counts.predicted
-            print counts
-            total_error = counts.difference.abs().sum()
-            if total_error<best_prediction_error:
-                best_prediction_error=total_error
-                best_prediction = counts.copy(deep=True)
-            print 'Total error: ' + str(total_error)
-
-        print '-------------------------'
-        print ''
-
-    print "Best prediction for division of voters:"
-    print best_prediction
 
 if __name__ == "__main__":
     main()
