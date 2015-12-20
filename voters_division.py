@@ -14,10 +14,10 @@ def main():
     counts = pd.DataFrame()
     counts['real'] = test.Vote.value_counts()
     best_prediction_error = len(test)  # max possible value
-    scores = pickle.load(open('scores.pickle'))
+    scores = modeling.cross_validation(train, modeling.CLASSIFIERS)
     classifiers = modeling.CLASSIFIERS.copy()
-    classifiers.update({'My classifier': modeling.MyClassifier(modeling.CLASSIFIERS, scores),
-                      'My classifier 2': modeling.MyClassifier2(modeling.CLASSIFIERS, scores)})
+    classifiers.update({'My classifier': modeling.MyClassifier(scores),
+                      'My classifier 2': modeling.MyClassifier2(scores)})
 
     for name, classifier in classifiers.iteritems():
         print name

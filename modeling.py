@@ -232,10 +232,10 @@ def evaluate_classifiers(X, Y, kf, classifiers):
     return scores
 
 
-def cross_validation(_df, Y, classifiers):
+def cross_validation(_df, classifiers):
     n_folds = 5
     kf = KFold(n=len(_df), n_folds=n_folds, shuffle=True)
-    return evaluate_classifiers(_df.values, Y, kf, classifiers)
+    return evaluate_classifiers(_df.drop('Vote', axis=1).values, _df.Vote.values, kf, classifiers)
 
 
 def SFS(df, label, classifier, max_out_size=15, n_folds=5, min_improve=0.001):
@@ -376,9 +376,8 @@ def f1_determine_f2(df_nonan, f1, f2):
 ###############################################################################
 
 class MyClassifier(object):
-    def __init__(self, classifiers, scores):
+    def __init__(self, scores):
         self.scores = scores
-        self.classifiers = classifiers
 
     def predict(self, X):
         proba=self.predict_proba(X)
@@ -387,7 +386,7 @@ class MyClassifier(object):
 
     def predict_proba(self, X):
         prediction_scores = defaultdict(lambda: defaultdict(float))
-        for name, classifier in self.classifiers.iteritems():
+        for name, classifier in CLASSIFIERS.iteritems():
             self.update_prediction_scores(X, classifier, name, prediction_scores)
 
         ret_val = pd.DataFrame(prediction_scores)
@@ -408,7 +407,7 @@ class MyClassifier(object):
         return right / len(y)
 
     def fit(self, X, y):
-        for classifier in self.classifiers.itervalues():
+        for classifier in CLASSIFIERS.itervalues():
             classifier.fit(X, y)
 
 
@@ -421,9 +420,9 @@ class MyClassifier2(MyClassifier):
                         prediction_scores[row_num][i] += predictions[row_num][i]*self.scores[name]
 
 
-def evaluate_classifier_against_test(classifier, features, l_encoder, name, test, train):
-    classifier.fit(train[list(features)], train.Vote.values)
-    score = classifier.score(test[list(features)], test.Vote.values)
+def evaluate_classifier_against_test(classifier, l_encoder, name, test, train):
+    classifier.fit(train.drop('Vote', axis=1), train.Vote.values)
+    score = classifier.score(test.drop('Vote', axis=1), test.Vote.values)
     print name + " score: " + str(score)
     confusion = defaultdict(lambda: defaultdict(int))
     predictions = l_encoder.inverse_transform(classifier.predict(test.drop('Vote', axis=1)))
@@ -462,19 +461,19 @@ def main():
     test = pd.read_csv('dataset/transformed_test.csv')
     l_encoder = pickle.load(open('encoder.pickle'))
 
-    features = list(train.columns)
-    features.remove('Vote')
     print 'Cross validation scores:'
-    scores = cross_validation(train[features], train.Vote.values, CLASSIFIERS)
-    my_classifiers = {'My classifier': MyClassifier(CLASSIFIERS, scores), 'My classifier 2': MyClassifier2(CLASSIFIERS, scores)}
-    cross_validation(train[features], train.Vote.values, my_classifiers)
-    pickle.dump(scores, open('scores.pickle', 'w'))
+    scores = cross_validation(train, CLASSIFIERS)
+    my_classifiers = {'My classifier': MyClassifier(scores),
+                      'My classifier 2': MyClassifier2(scores)}
+    scores.update(cross_validation(train, my_classifiers))
+    all_classifiers = CLASSIFIERS.copy()
+    all_classifiers.update(my_classifiers)
     best_classifier_name = max(scores.iteritems(), key=operator.itemgetter(1))[0]
 
     print 'Evaluating ' + best_classifier_name + ' against the test set:'
-    evaluate_classifier_against_test(CLASSIFIERS[best_classifier_name], features, l_encoder, best_classifier_name, test, train)
+    evaluate_classifier_against_test(all_classifiers[best_classifier_name], l_encoder, best_classifier_name, test, train)
 
-    test['prediction'] = l_encoder.inverse_transform(CLASSIFIERS[best_classifier_name].predict(test.drop('Vote', axis=1)))
+    test['prediction'] = l_encoder.inverse_transform(all_classifiers[best_classifier_name].predict(test.drop('Vote', axis=1)))
     test['Vote'] = l_encoder.inverse_transform(test['Vote'])
     test.to_csv('dataset/test_predictions.csv', index=False)
 
