@@ -3,7 +3,7 @@ from collections import defaultdict
 import pandas as pd
 import pickle
 from sklearn.tree import DecisionTreeClassifier
-import theElectionChallenge
+import modeling
 
 
 def main():
@@ -13,20 +13,20 @@ def main():
     test['Vote'] = l_encoder.inverse_transform(test['Vote'])
     counts = pd.DataFrame()
     counts['real'] = test.Vote.value_counts()
-    # test_predictions = pd.read_csv('dataset/test_predictions.csv')
+    best_prediction_error = len(test)  # max possible value
 
-
-
-    #using predict_proba
-
-    for name, classifier in theElectionChallenge.classifiers.iteritems():
+    for name, classifier in modeling.CLASSIFIERS.iteritems():
         print name
         classifier.fit(train.drop('Vote', axis=1), train.Vote.values)
         print 'Division of voters by label prediction:'
         counts['predicted'] = pd.Series(l_encoder.inverse_transform(classifier.predict(test.drop('Vote', axis=1)))).value_counts()
         counts['difference'] = counts.real - counts.predicted
-        # print counts
-        print 'Total error: ' + str(counts.difference.abs().sum())
+        print counts
+        total_error = counts.difference.abs().sum()/2
+        if total_error<best_prediction_error:
+            best_prediction_error=total_error
+            best_prediction = counts.copy(True)
+        print 'Total error: ' + str(total_error)
 
         if hasattr(classifier, 'predict_proba'):
             print 'Division of voters by probabilistic prediction:'
@@ -34,8 +34,18 @@ def main():
             proba.columns = l_encoder.classes_
             counts['predicted'] = proba.sum()
             counts['difference'] = counts.real - counts.predicted
-            # print counts
-            print 'Total error: ' + str(counts.difference.abs().sum())
+            print counts
+            total_error = counts.difference.abs().sum()/2
+            if total_error<best_prediction_error:
+                best_prediction_error=total_error
+                best_prediction = counts.copy(deep=True)
+            print 'Total error: ' + str(total_error)
+
+        print '-------------------------'
+        print ''
+
+    print "Best prediction for division of voters:"
+    print best_prediction
 
 
 if __name__ == "__main__":
