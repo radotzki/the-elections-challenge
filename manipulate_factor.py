@@ -80,19 +80,13 @@ def main():
     new_train = pd.concat([train[train.Vote == first_party], train[train.Vote == second_party]])
     features_to_manipulate = most_important_features(new_train)
 
-    # plot_density_by_most_important_features(new_train, [first_party, second_party], 'first party vs second party: ')
-    # plot_one_party_vs_all(train, first_party, 'first party')
-    # plot_one_party_vs_all(train, second_party, 'second party')
+    plot_density_by_most_important_features(new_train, [first_party, second_party], 'first party vs second party: ')
+    plot_one_party_vs_all(train, first_party, 'first party')
+    plot_one_party_vs_all(train, second_party, 'second party')
 
-    # test['Yearly_ExpensesK'] = test['Yearly_ExpensesK'].map(lambda x: 2*x)
     test['Yearly_ExpensesK'] = 0.46
     test['Yearly_IncomeK'] = -0.13
     test['Will_vote_only_large_party'] = 0
-
-    # Those manipulations will change the winning party
-    # test.loc[test.Vote == first_party, features_to_manipulate[0]] = 0.6
-    # test.loc[test.Vote == first_party, features_to_manipulate[1]] = 0
-    # test.loc[test.Vote == second_party, features_to_manipulate[1]] = -0.71
 
     print 'with prediction and manipulation:'
     print_vote_count(pd.concat([train, prediction(train, test)]), first_party, second_party)
