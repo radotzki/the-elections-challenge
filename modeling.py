@@ -381,12 +381,23 @@ class MyClassifier(object):
         self.classifiers = classifiers
 
     def predict(self, X):
+        proba=self.predict_proba(X)
+        proba.fillna(0, inplace=True)
+        return [max(row_scores.iteritems(), key=operator.itemgetter(1))[0] for row_num, row_scores in proba.iterrows()]
+
+    def predict_proba(self, X):
         prediction_scores = defaultdict(lambda: defaultdict(float))
         for name, classifier in self.classifiers.iteritems():
-            predictions = classifier.predict(X)
-            for i in xrange(len(X)):
-                prediction_scores[i][predictions[i]] += self.scores[name]
-        return [max(row_scores.iteritems(), key=operator.itemgetter(1))[0] for row_scores in prediction_scores.itervalues()]
+            self.update_prediction_scores(X, classifier, name, prediction_scores)
+
+        ret_val = pd.DataFrame(prediction_scores)
+        ret_val = ret_val/ret_val.sum()
+        return ret_val.transpose()
+
+    def update_prediction_scores(self, X, classifier, name, prediction_scores):
+        predictions = classifier.predict(X)
+        for i in xrange(len(X)):
+            prediction_scores[i][predictions[i]] += self.scores[name]
 
     def score(self, X, y):
         right = 0.
@@ -402,26 +413,12 @@ class MyClassifier(object):
 
 
 class MyClassifier2(MyClassifier):
-    def predict(self, X):
-        proba=self.predict_proba(X)
-        return [max(row_scores.iteritems(), key=operator.itemgetter(1))[0] for row_num, row_scores in proba.iterrows()]
-
-    def predict_proba(self, X):
-        prediction_scores = defaultdict(lambda: defaultdict(float))
-        for name, classifier in self.classifiers.iteritems():
-            if hasattr(classifier, 'predict_proba'):
+    def update_prediction_scores(self, X, classifier, name, prediction_scores):
+        if hasattr(classifier, 'predict_proba'):
                 predictions = classifier.predict_proba(X)
                 for row_num in xrange(len(X)):
                     for i in xrange(len(predictions[row_num])):
                         prediction_scores[row_num][i] += predictions[row_num][i]*self.scores[name]
-            # else:
-            #     predictions = classifier.predict(X)
-            #     for row_num in xrange(len(X)):
-            #         prediction_scores[row_num][predictions[row_num]] += self.scores[name]
-
-        ret_val = pd.DataFrame(prediction_scores)
-        ret_val = ret_val/ret_val.sum()
-        return ret_val.transpose()
 
 
 def evaluate_classifier_against_test(classifier, features, l_encoder, name, test, train):
