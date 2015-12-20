@@ -24,6 +24,7 @@ import scipy.interpolate
 
 CLASSIFIERS = {
     "Decision Tree 10": DecisionTreeClassifier(max_depth=10),
+    "Nearest Neighbors 5": KNeighborsClassifier(n_neighbors=5),
     "Perceptron  100": Perceptron(n_iter=100),
     "Linear SVM OVO": SVC(kernel="linear", C=1, probability=True),
     "Linear SVM OVR": LinearSVC(C=1),
@@ -470,7 +471,7 @@ def main():
     scores = cross_validation(train[features], train.Vote.values, CLASSIFIERS)
     my_classifiers = {'My classifier': MyClassifier(CLASSIFIERS, scores), 'My classifier 2': MyClassifier2(CLASSIFIERS, scores)}
     cross_validation(train[features], train.Vote.values, my_classifiers)
-
+    pickle.dump(scores, open('scores.pickle', 'w'))
     best_classifier_name = max(scores.iteritems(), key=operator.itemgetter(1))[0]
 
     print 'Evaluating ' + best_classifier_name + ' against the test set:'
