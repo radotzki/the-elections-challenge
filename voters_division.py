@@ -14,8 +14,12 @@ def main():
     counts = pd.DataFrame()
     counts['real'] = test.Vote.value_counts()
     best_prediction_error = len(test)  # max possible value
+    scores = modeling.cross_validation(train, modeling.CLASSIFIERS)
+    classifiers = modeling.CLASSIFIERS.copy()
+    classifiers.update({'My classifier': modeling.MyClassifier(scores),
+                      'My classifier 2': modeling.MyClassifier2(scores)})
 
-    for name, classifier in modeling.CLASSIFIERS.iteritems():
+    for name, classifier in classifiers.iteritems():
         print name
         classifier.fit(train.drop('Vote', axis=1), train.Vote.values)
         print 'Division of voters by label prediction:'
