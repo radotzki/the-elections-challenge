@@ -1,4 +1,5 @@
 from sklearn.cluster import KMeans
+from sklearn.cross_validation import KFold
 from sklearn.mixture import GMM
 import numpy
 import numpy as np
@@ -79,41 +80,56 @@ def main():
 
     dummis_transformation(df)
 
-    X_train = df.drop('Vote', axis=1)
-    y_train = df.Vote.values
+
+    n_folds = 5
 
     lowest_aic = np.infty
     aic = []
     # TODO: keep only the commented out lines
-    # n_components_range = range(1, 20)
+    n_components_range = xrange(1, 50)
     # cv_types = ['spherical', 'tied', 'diag', 'full']
-    n_components_range = [18]
-    cv_types = ['diag']
+    # n_components_range = [18]
+    cv_types = ['diag', 'full']
 
     for cv_type in cv_types:
         for n_components in n_components_range:
-            gmm = GMM(n_components=n_components, covariance_type=cv_type)
+            tot_aic = 0
+            tot_bic = 0
+            kf = KFold(n=len(df), n_folds=n_folds, shuffle=True)
+            for k, (train_index, test_index) in enumerate(kf):
+                # clf.fit(X[train_index], Y[train_index])
+                # acc = clf.score(X[test_index], Y[test_index])
 
-            # Since we have class labels for the training data, we can
-            # initialize the GMM parameters in a supervised manner.
-            gmm.means_ = np.array([X_train[y_train == i].mean(axis=0) for i in xrange(n_components)])
+                X_train = df.drop('Vote', axis=1).values[train_index]
+                X_test = df.drop('Vote', axis=1).values[test_index]
+                y_train = df.Vote.values[train_index]
 
-            # Fit a mixture of Gaussians with EM
-            gmm.fit(X_train)
+                gmm = GMM(n_components=n_components, covariance_type=cv_type)
 
-            aic.append(gmm.aic(X_train))
+                # Since we have class labels for the training data, we can
+                # initialize the GMM parameters in a supervised manner.
+                gmm.means_ = np.array([X_train[y_train == i].mean(axis=0) for i in xrange(n_components)])
+
+                # Fit a mixture of Gaussians with EM
+                gmm.fit(X_train)
+                tot_aic += gmm.aic(X_test)
+                tot_bic += gmm.bic(X_test)
+
+            avg_aic = tot_aic / n_folds
+            avg_bic = tot_bic / n_folds
+            aic.append(avg_aic)
             print 'n_components: ' + str(n_components) +\
                     ' cv_type: ' + str(cv_type) + \
-                    ' aic: ' + str(gmm.aic(X_train)) + \
-                    ' bic: ' + str(gmm.bic(X_train))
+                    ' avg aic:\t' + str(avg_aic) + \
+                    '\tavg bic:\t' + str(avg_bic)
             if aic[-1] < lowest_aic:
                 lowest_aic = aic[-1]
                 best_gmm = gmm
 
-    print 'best model:'
-    print '\tn_components = ' + str(best_gmm.n_components)
-    print '\tcovariance_type = ' + str(best_gmm.covariance_type)
-    print '\taic = ' + str(lowest_aic)
+        print 'best model so far:'
+        print '\tn_components = ' + str(best_gmm.n_components)
+        print '\tcovariance_type = ' + str(best_gmm.covariance_type)
+        print '\taic = ' + str(lowest_aic)
 
     y_train_pred = best_gmm.predict(X_train)
     for v in xrange(best_gmm.n_components):
