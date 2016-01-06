@@ -1,4 +1,5 @@
 from sklearn.cluster import KMeans
+from matplotlib import pyplot as plt
 from sklearn.cross_validation import KFold
 from sklearn.mixture import GMM
 import numpy
@@ -36,6 +37,14 @@ def get_votes_count_by_party(df):
     return parties
 
 
+def get_parties_by_cluster(df):
+    clusters = {}
+    for v in df.cluster.unique():
+        clusters[v] = len(df[df.cluster == v])
+
+    return clusters
+
+
 def evaluate_coalition(df, coalition):
     coalition_df = df[df.Vote.isin(coalition)].drop('Vote', axis=1)
     coalition_mean = coalition_df.mean()
@@ -59,7 +68,9 @@ def dummis_transformation(df):
 
 
 def main():
-    df = pd.read_csv('./dataset/transformed_train.csv')
+    df_train = pd.read_csv('./dataset/transformed_train.csv')
+    df_test = pd.read_csv('./dataset/transformed_test.csv')
+    df = pd.concat([df_train, df_test])
     binary_transformation(df)
 
     # n_clusters = 100
@@ -97,18 +108,10 @@ def main():
             tot_bic = 0
             kf = KFold(n=len(df), n_folds=n_folds, shuffle=True)
             for k, (train_index, test_index) in enumerate(kf):
-                # clf.fit(X[train_index], Y[train_index])
-                # acc = clf.score(X[test_index], Y[test_index])
-
                 X_train = df.drop('Vote', axis=1).values[train_index]
                 X_test = df.drop('Vote', axis=1).values[test_index]
-                y_train = df.Vote.values[train_index]
 
                 gmm = GMM(n_components=n_components, covariance_type=cv_type)
-
-                # Since we have class labels for the training data, we can
-                # initialize the GMM parameters in a supervised manner.
-                gmm.means_ = np.array([X_train[y_train == i].mean(axis=0) for i in xrange(n_components)])
 
                 # Fit a mixture of Gaussians with EM
                 gmm.fit(X_train)
@@ -131,10 +134,20 @@ def main():
         print '\tcovariance_type = ' + str(best_gmm.covariance_type)
         print '\taic = ' + str(lowest_aic)
 
-    y_train_pred = best_gmm.predict(X_train)
+    best_gmm = GMM(n_components=best_gmm.n_components, covariance_type=best_gmm.covariance_type)
+    y_train_pred = best_gmm.fit_predict(df.drop('Vote', axis=1))
     for v in xrange(best_gmm.n_components):
         cluster = df.iloc[[x for x, y in enumerate(y_train_pred) if y==v]]
-        print get_votes_count_by_party(cluster)
+        votes_by_party = pd.DataFrame(data=get_votes_count_by_party(cluster), index=[0])
+        votes_by_party.plot(kind='bar', title='votes by party in cluster')
+    plt.show()
+
+    df['cluster'] = y_train_pred
+    for party in df.Vote.unique():
+        party_df = df[df.Vote == party]
+        parties_by_cluster = pd.DataFrame(data=get_parties_by_cluster(party_df), index=[0])
+        parties_by_cluster.plot(kind='bar', title='party' + str(party) + ' by clusters')
+    plt.show()
 
 
 
