@@ -1,4 +1,5 @@
-from sklearn.cluster import KMeans
+import math
+
 from matplotlib import pyplot as plt
 from sklearn.cross_validation import KFold
 from sklearn.mixture import GMM
@@ -64,14 +65,17 @@ def binary_transformation(df):
 def dummis_transformation(df):
     dummies_df = pd.get_dummies(df['Most_Important_Issue'], prefix='Most_Important_Issue')
     df = pd.concat([df, dummies_df], axis=1, join='inner')
-    df.drop('Most_Important_Issue', axis=1, inplace=True)
+    return df.drop('Most_Important_Issue', axis=1)
 
 
 def main():
     df_train = pd.read_csv('./dataset/transformed_train.csv')
     df_test = pd.read_csv('./dataset/transformed_test.csv')
-    df = pd.concat([df_train, df_test])
-    binary_transformation(df)
+    # df = df_train
+    binary_transformation(df_train)
+    binary_transformation(df_test)
+    df_train = dummis_transformation(df_train)
+    df_test = dummis_transformation(df_test)
 
     # n_clusters = 100
     # cls = KMeans(n_clusters=n_clusters)
@@ -89,27 +93,25 @@ def main():
     # for coalition in minimal_coalitions:
     #     evaluate_coalition(df.drop('Most_Important_Issue', axis=1), coalition)
 
-    dummis_transformation(df)
-
 
     n_folds = 5
 
     lowest_aic = np.infty
     aic = []
     # TODO: keep only the commented out lines
-    n_components_range = xrange(1, 50)
+    # n_components_range = xrange(1, 40)
     # cv_types = ['spherical', 'tied', 'diag', 'full']
-    # n_components_range = [18]
-    cv_types = ['diag', 'full']
+    n_components_range = [15]
+    cv_types = ['diag']
 
     for cv_type in cv_types:
         for n_components in n_components_range:
             tot_aic = 0
             tot_bic = 0
-            kf = KFold(n=len(df), n_folds=n_folds, shuffle=True)
+            kf = KFold(n=len(df_train), n_folds=n_folds, shuffle=True)
             for k, (train_index, test_index) in enumerate(kf):
-                X_train = df.drop('Vote', axis=1).values[train_index]
-                X_test = df.drop('Vote', axis=1).values[test_index]
+                X_train = df_train.drop('Vote', axis=1).values[train_index]
+                X_test = df_train.drop('Vote', axis=1).values[test_index]
 
                 gmm = GMM(n_components=n_components, covariance_type=cv_type)
 
@@ -134,20 +136,20 @@ def main():
         print '\tcovariance_type = ' + str(best_gmm.covariance_type)
         print '\taic = ' + str(lowest_aic)
 
-    best_gmm = GMM(n_components=best_gmm.n_components, covariance_type=best_gmm.covariance_type)
-    y_train_pred = best_gmm.fit_predict(df.drop('Vote', axis=1))
-    for v in xrange(best_gmm.n_components):
-        cluster = df.iloc[[x for x, y in enumerate(y_train_pred) if y==v]]
-        votes_by_party = pd.DataFrame(data=get_votes_count_by_party(cluster), index=[0])
-        votes_by_party.plot(kind='bar', title='votes by party in cluster')
-    plt.show()
+    # gmm = GMM(n_components=best_gmm.n_components, covariance_type=best_gmm.covariance_type)
+    # y_train_pred = gmm.fit_predict(df_train.drop('Vote', axis=1))
+    # for v in xrange(gmm.n_components):
+    #     cluster = df_train.iloc[[x for x, y in enumerate(y_train_pred) if y==v]]
+    #     votes_by_party = pd.DataFrame(data=get_votes_count_by_party(cluster), index=[0])
+    #     votes_by_party.plot(kind='bar', title='votes by party in cluster')
+    # plt.show()
 
-    df['cluster'] = y_train_pred
-    for party in df.Vote.unique():
-        party_df = df[df.Vote == party]
-        parties_by_cluster = pd.DataFrame(data=get_parties_by_cluster(party_df), index=[0])
-        parties_by_cluster.plot(kind='bar', title='party' + str(party) + ' by clusters')
-    plt.show()
+    # df['cluster'] = y_train_pred
+    # for party in df.Vote.unique():
+    #     party_df = df[df.Vote == party]
+    #     parties_by_cluster = pd.DataFrame(data=get_parties_by_cluster(party_df), index=[0])
+    #     parties_by_cluster.plot(kind='bar', title='party' + str(party) + ' by clusters')
+    # plt.show()
 
 
 
