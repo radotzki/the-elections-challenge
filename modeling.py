@@ -473,10 +473,26 @@ def main():
     print 'Evaluating ' + best_classifier_name + ' against the test set:'
     evaluate_classifier_against_test(all_classifiers[best_classifier_name], l_encoder, best_classifier_name, test, train)
 
-    test['prediction'] = l_encoder.inverse_transform(all_classifiers[best_classifier_name].predict(test.drop('Vote', axis=1)))
-    test['Vote'] = l_encoder.inverse_transform(test['Vote'])
-    test.to_csv('dataset/test_predictions.csv', index=False)
+    # test['prediction'] = l_encoder.inverse_transform(all_classifiers[best_classifier_name].predict(test.drop('Vote', axis=1)))
+    # test['Vote'] = l_encoder.inverse_transform(test['Vote'])
+    # test.to_csv('dataset/test_predictions.csv', index=False)
 
+    test['prediction'] = all_classifiers[best_classifier_name].predict(test.drop('Vote', axis=1))
+
+    test['Overall_happiness_score'] = test['Overall_happiness_score'] + 1
+    test['Yearly_IncomeK'] = test['Yearly_IncomeK'] + 1.2
+
+
+    test['manipulate'] = all_classifiers[best_classifier_name].predict(test.drop('Vote', axis=1).drop('prediction', axis=1))
+
+
+    fir = ['9', str(len(test[test.Vote == 9])), str(len(test[test.prediction == 9])), str(len(test[test.manipulate == 9]))]
+    sec = ['0', str(len(test[test.Vote == 0])), str(len(test[test.prediction == 0])), str(len(test[test.manipulate == 0]))]
+    thr = ['7', str(len(test[test.Vote == 7])), str(len(test[test.prediction == 7])), str(len(test[test.manipulate == 7]))]
+    d = pd.DataFrame([fir, sec, thr] , columns=['party' ,'actual', 'prediction', 'predication & manipulation'])
+    print d
+
+    # todo: show changes in percent
 
 if __name__ == "__main__":
     main()
