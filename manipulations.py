@@ -14,10 +14,10 @@ def main():
     train['Vote'] = l_encoder.inverse_transform(train['Vote'])
 
 
-    # print 'make 7 win:'
-    # evaluate_manipulation(l_encoder, test, train, make_7_win)
-    # print 'strengthen_coalition'
-    # evaluate_manipulation(l_encoder, test, train, strengthen_coalition)
+    print 'make 7 win:'
+    evaluate_manipulation(l_encoder, test, train, make_7_win)
+    print 'strengthen_coalition'
+    evaluate_manipulation(l_encoder, test, train, strengthen_coalition)
     print 'change_coalition:'
     evaluate_manipulation(l_encoder, test, train, change_coalition)
 
@@ -26,9 +26,6 @@ def evaluate_manipulation(l_encoder, test, train, manipulation):
     # Cross-validation on train set
     print 'Cross-validation on train set\n'
     counts = pd.DataFrame()
-    # counts['real'] = train.Vote.value_counts()
-    # counts['real'] = 0
-    # counts['predicted'] = 0
     X = train.drop('Vote', axis=1)
     Y = train.Vote.values
     n_folds = 5
@@ -57,7 +54,6 @@ def evaluate_manipulation(l_encoder, test, train, manipulation):
             counts['real'] += train.loc[test_index].Vote.value_counts()
     counts['%vote'] = counts.prediction / len(train) * 100
     counts['%manipulated_vote'] = counts.manipulated / len(train) * 100
-    # counts['%change'] = (counts.manipulated - counts.real) * 100 / counts.real
     counts['manipulated'] /= n_folds
     counts['prediction'] /= n_folds
     counts['real'] /= n_folds
@@ -77,7 +73,6 @@ def evaluate_manipulation(l_encoder, test, train, manipulation):
     counts['real'] = test.Vote.value_counts()
     counts['%vote'] = counts.prediction / len(test) * 100
     counts['%manipulated_vote'] = counts.manipulated / len(test) * 100
-    # counts['%change'] = (counts.manipulated - counts.real) * 100 / counts.real
     print_df(counts)
 
 

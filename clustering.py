@@ -98,10 +98,9 @@ def main():
 
     lowest_aic = np.infty
     aic = []
-    # TODO: keep only the commented out lines
     # n_components_range = xrange(1, 40)
     # cv_types = ['spherical', 'tied', 'diag', 'full']
-    n_components_range = [15]
+    n_components_range = [14]
     cv_types = ['diag']
 
     for cv_type in cv_types:
@@ -136,13 +135,13 @@ def main():
         print '\tcovariance_type = ' + str(best_gmm.covariance_type)
         print '\taic = ' + str(lowest_aic)
 
-    # gmm = GMM(n_components=best_gmm.n_components, covariance_type=best_gmm.covariance_type)
-    # y_train_pred = gmm.fit_predict(df_train.drop('Vote', axis=1))
-    # for v in xrange(gmm.n_components):
-    #     cluster = df_train.iloc[[x for x, y in enumerate(y_train_pred) if y==v]]
-    #     votes_by_party = pd.DataFrame(data=get_votes_count_by_party(cluster), index=[0])
-    #     votes_by_party.plot(kind='bar', title='votes by party in cluster')
-    # plt.show()
+    gmm = GMM(n_components=best_gmm.n_components, covariance_type=best_gmm.covariance_type)
+    y_train_pred = gmm.fit_predict(df_train.drop('Vote', axis=1))
+    for v in xrange(gmm.n_components):
+        cluster = df_train.iloc[[x for x, y in enumerate(y_train_pred) if y==v]]
+        votes_by_party = pd.DataFrame(data=get_votes_count_by_party(cluster), index=[0])
+        votes_by_party.plot(kind='bar', title='votes by party in cluster')
+    plt.show()
 
     # df['cluster'] = y_train_pred
     # for party in df.Vote.unique():
