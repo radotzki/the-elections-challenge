@@ -9,11 +9,12 @@ import numpy as np
 from numpy.linalg import lstsq
 import pickle
 import operator
+from sklearn.mixture import GMM
 from sklearn.preprocessing import Imputer, MinMaxScaler
 from scipy.stats import norm, kstest
 from sklearn import preprocessing
 from sklearn.cross_validation import KFold
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
@@ -23,30 +24,43 @@ import pandas as pd
 import scipy
 import scipy.interpolate
 import random
+from sklearn.cross_validation import cross_val_score
+from sklearn.cross_validation import train_test_split
 
 CLASSIFIERS = {
-    # "Random Forest 5": RandomForestClassifier(n_estimators=5),
+    "Random Forest 5": RandomForestClassifier(n_estimators=5),
     "Random Forest 10": RandomForestClassifier(n_estimators=10),
-    # "Random Forest 20": RandomForestClassifier(n_estimators=20),
-    # "Random Forest 40": RandomForestClassifier(n_estimators=50),
-    # "Random Forest 100": RandomForestClassifier(n_estimators=100),
-    # # "Decision Tree 5": DecisionTreeClassifier(max_depth=5),
+    "Random Forest 20": RandomForestClassifier(n_estimators=20),
+    "Random Forest 40": RandomForestClassifier(n_estimators=50),
+    "Random Forest 100": RandomForestClassifier(n_estimators=100),
+    "Decision Tree 5": DecisionTreeClassifier(max_depth=5),
     "Decision Tree 10": DecisionTreeClassifier(max_depth=10),
-    # # "Decision Tree 20": DecisionTreeClassifier(max_depth=20),
-    # # "Nearest Neighbors 4": KNeighborsClassifier(n_neighbors=4),
-    "Nearest Neighbors 5": KNeighborsClassifier(n_neighbors=5),
-    # # "Nearest Neighbors 6": KNeighborsClassifier(n_neighbors=6),
-    # # "Perceptron  100": Perceptron(n_iter=100),
-    # # "Linear SVM OVO 0.1": SVC(kernel="linear", C=0.1, probability=True),
-    "Linear SVM OVO 1": SVC(kernel="linear", C=1, probability=True),
-    # # "Linear SVM OVO 10": SVC(kernel="linear", C=10, probability=True),
-    # # "rbf SVM OVO 0.1": SVC(kernel="rbf", C=0.1, probability=True),
+    "Decision Tree 20": DecisionTreeClassifier(max_depth=20),
+    "Nearest Neighbors 4": KNeighborsClassifier(n_neighbors=4),
+    "Nearest Neighbors 25": KNeighborsClassifier(n_neighbors=25),
+    "Nearest Neighbors 6": KNeighborsClassifier(n_neighbors=6),
+    # "AdaBoost 100": AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100),
+    # "AdaBoost 1000": AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000),
+    # "Perceptron  100": Perceptron(n_iter=100),
+    # "Linear SVM OVO 0.1": SVC(kernel="linear", C=0.1, probability=True),
+    # "Linear SVM OVO 1": SVC(kernel="linear", C=1, probability=True),
+    # "Linear SVM OVO 10": SVC(kernel="linear", C=10, probability=True),
+    # "rbf SVM OVO 0.1": SVC(kernel="rbf", C=0.1, probability=True),
     # "rbf SVM OVO 1": SVC(kernel="rbf", C=1, probability=True),
-    # # "rbf SVM OVO 10": SVC(kernel="rbf", C=10, probability=True),
-    # # "Linear SVM OVR 0.1": LinearSVC(C=.1),
+    # "rbf SVM OVO 10": SVC(kernel="rbf", C=10, probability=True),
+    # "Linear SVM OVR 0.1": LinearSVC(C=.1),
     # "Linear SVM OVR 1": LinearSVC(C=1),
-    # # "Linear SVM OVR 10": LinearSVC(C=10),
-    # "GaussianNB": GaussianNB()
+    # "Linear SVM OVR 10": LinearSVC(C=10),
+    # "GaussianNB": GaussianNB(),
+}
+
+CLUSTERS = {
+    "GMM 11": GMM(n_components=11, covariance_type='diag'),
+    "GMM 12": GMM(n_components=12, covariance_type='diag'),
+    "GMM 13": GMM(n_components=13, covariance_type='diag'),
+    "GMM 14": GMM(n_components=14, covariance_type='diag'),
+    "GMM 15": GMM(n_components=15, covariance_type='diag'),
+    "GMM 16": GMM(n_components=16, covariance_type='diag'),
 }
 
 def array_diff(a, b):
@@ -192,7 +206,6 @@ def reduce_Most_Important_Issue(_df):
     _df['Most_Important_Issue'] = _df['Most_Important_Issue'].map(lambda x: 0 if x in [0, 1, 2, 4, 7] else x)
 
 
-
 def get_score(X, Y, clf, kf):
     score_sum = 0
     for k, (train_index, test_index) in enumerate(kf):
@@ -220,7 +233,7 @@ def f1_determine_f2(df_nonan, f1, f2):
     return flag
 
 
-def prepare_date(continuous_features, features_to_keep, df):
+def prepare_data(continuous_features, features_to_keep, df):
     df = mark_negative_values_as_nan(df)
     df = outlier_detection(df, continuous_features)
     df = categorical_features_transformation(df)
@@ -258,6 +271,7 @@ def prepare_date(continuous_features, features_to_keep, df):
     df['Financial_agenda_matters'] = df['Financial_agenda_matters'].map(lambda x: 1 if x == 1 else -1)
     # nominal
     dummies_df = pd.get_dummies(df['Most_Important_Issue'], prefix='Most_Important_Issue')
+    dummies_df[dummies_df == 0] = -1
     df = pd.concat([df, dummies_df], axis=1, join='inner').drop('Most_Important_Issue', axis=1)
     return df
 
@@ -274,8 +288,8 @@ def load_and_prepare_data():
     unlabeled = pd.read_csv('dataset/ElectionsData_Pred_Features.csv')
     l_encoder = label_encoder(labeled)
     pickle.dump(l_encoder, open('encoder.pickle', 'w'))
-    labeled = prepare_date(continuous_features, features_to_keep, labeled)
-    unlabeled = prepare_date(continuous_features, features_to_keep, unlabeled)
+    labeled = prepare_data(continuous_features, features_to_keep, labeled)
+    unlabeled = prepare_data(continuous_features, features_to_keep, unlabeled)
     features_to_keep = ['Yearly_ExpensesK', 'Yearly_IncomeK', 'Overall_happiness_score', 'Avg_Residancy_Altitude',
                         'Will_vote_only_large_party', 'Financial_agenda_matters', 'Most_Important_Issue_0.0',
                         'Most_Important_Issue_3.0', 'Most_Important_Issue_5.0', 'Most_Important_Issue_6.0']
@@ -325,7 +339,31 @@ def cross_validation(_df, classifiers):
     return scores
 
 
+def cross_validation_wo_resample(_df, classifiers):
+    n_folds = 10
+    scores = {}
+
+    for name, clf in classifiers.iteritems():
+        print 'start ' + str(name) + ' test..'
+        clf_scores = cross_val_score(clf, _df.drop('Vote', axis=1), _df.Vote.values, cv=n_folds)
+        print("{0} average score: {1:.5}".format(name, clf_scores.mean()))
+        scores[name] = clf_scores.mean()
+
+    kf = KFold(n=len(_df), n_folds=n_folds, shuffle=True)
+    name, clf = 'MyClassifier2', MyClassifier2(scores)
+    score_sum = 0
+    print 'start ' + str(name) + ' test..'
+    for k, (train_index, test_index) in enumerate(kf):
+        clf.fit(_df.iloc[train_index].drop('Vote', axis=1).values, _df.iloc[train_index].Vote.values)
+        acc = clf.score(_df.iloc[test_index].drop('Vote', axis=1).values, _df.iloc[test_index].Vote.values)
+        score_sum += acc
+    print("{0} average score: {1:.5}".format(name, score_sum / kf.n_folds))
+
+    return scores
+
+
 def resample(df):
+    print "resampling.."
     rows_to_select = range(len(df))
     vote_counts = df.Vote.value_counts()
     for party in xrange(10):
@@ -333,7 +371,6 @@ def resample(df):
             rows_to_select.append(random.choice(df[df.Vote == party].index))
 
     return df.iloc[rows_to_select]
-
 
 
 class MyClassifier(object):
@@ -361,9 +398,11 @@ class MyClassifier(object):
     def score(self, X, y):
         right = 0.
         predictions = self.predict(X)
-        for i in xrange(len(X)):
-            if predictions[i] == y[i]:
-                right += 1
+
+        if predictions:
+            for i in xrange(len(X)):
+                if predictions[i] == y[i]:
+                    right += 1
         return right / len(y)
 
     def fit(self, X, y):
@@ -373,12 +412,87 @@ class MyClassifier(object):
 
 class MyClassifier2(MyClassifier):
     def update_prediction_scores(self, X, classifier, name, prediction_scores):
-        if hasattr(classifier, 'predict_proba'):
+        if (hasattr(classifier, 'predict_proba') and
+                (not hasattr(classifier, 'n_classes_') or classifier.n_classes_ > 1) and
+                is_valid_classifier(classifier, X)):
             predictions = classifier.predict_proba(X)
             for row_num in xrange(len(X)):
                 for i in xrange(len(predictions[row_num])):
                     prediction_scores[row_num][i] += predictions[row_num][i]*self.scores[name]
 
+
+def is_valid_classifier(clf, test):
+    return not hasattr(clf, 'n_neighbors') or clf.n_neighbors <= len(test)
+
+
+def evaluate_classifier(train, test, classifiers):
+    scores = {}
+
+    for name, clf in classifiers.iteritems():
+        if is_valid_classifier(clf, test):
+            clf.fit(train.drop('Vote', axis=1).values, train.Vote.values)
+            score = clf.score(test.drop('Vote', axis=1).values, test.Vote.values)
+            print("{0} score: {1:.5}".format(name, score))
+            scores[name] = score
+        else:
+            scores[name] = 0
+
+    name, clf = 'MyClassifier2', MyClassifier2(scores)
+    clf.fit(train.drop('Vote', axis=1).values, train.Vote.values)
+    scores[name] = clf.score(test.drop('Vote', axis=1).values, test.Vote.values)
+    print("{0} score: {1:.5}".format(name, scores[name]))
+
+    best_classifier = max(scores.iteritems(), key=operator.itemgetter(1))
+    print 'best classifier: ' + best_classifier[0] + ', score: ' + str(best_classifier[1])
+    return best_classifier
+
+
+def get_best_cluster(train, test, clusters):
+    aics = {}
+
+    for name, cls in clusters.iteritems():
+        cls.fit(train.drop('Vote', axis=1).values, train.Vote.values)
+        aic = cls.aic(test.drop('Vote', axis=1).values)
+        aics[cls] = aic
+
+    best_cluster = min(aics.iteritems(), key=operator.itemgetter(1))[0]
+    print 'best cluster: ' + str(best_cluster)
+    return best_cluster
+
+
+def evaluate_clustering(train, test, clusters):
+    cls = get_best_cluster(train, test, clusters)
+    cls.fit(train.drop('Vote', axis=1).values, train.Vote.values)
+    train_pred = cls.predict(train.drop('Vote', axis=1).values)
+    test_pred = cls.predict(test.drop('Vote', axis=1).values)
+    right = 0.
+
+    for v in xrange(cls.n_components):
+        train_cluster = train.iloc[[x for x, y in enumerate(train_pred) if y==v]]
+        test_cluster = test.iloc[[x for x, y in enumerate(test_pred) if y==v]]
+
+        if not test_cluster.empty:
+
+            clf = DecisionTreeClassifier(max_depth=5)
+            clf.fit(train_cluster.drop('Vote', axis=1).values, train_cluster.Vote.values)
+            score = clf.score(test_cluster.drop('Vote', axis=1).values, test_cluster.Vote.values)
+            print 'cluster #' + str(v) + ', score: ' + str(score)
+            right += score * len(test_cluster)
+
+    score = right / len(test)
+    return score
+
+
+def clustering_cross_validation(train, clusters):
+    scores = list()
+    kf = KFold(n=len(train), n_folds=5, shuffle=True)
+    for k, (train_index, test_index) in enumerate(kf):
+        print '\nEvaluating fold #' + str(k)
+        score = evaluate_clustering(train.iloc[train_index], train.iloc[test_index], clusters)
+        scores.append(score)
+        print 'Fold #' + str(k) + ', total score: ' + str(score)
+
+    return sum(scores)/len(scores)
 
 def main():
     # labeled, unlabeled, l_encoder = load_and_prepare_data()
@@ -388,7 +502,27 @@ def main():
     unlabeled = pd.read_csv('dataset/unlabeled.csv')
     l_encoder = pickle.load(open('encoder.pickle'))
 
-    scores = cross_validation(labeled, CLASSIFIERS)
+    train, test = train_test_split(labeled, test_size=0.4)
+    test, validation = train_test_split(test, test_size=0.5)
+
+    print '\nCross validation without resample:'
+    cross_validation_wo_resample(train, CLASSIFIERS)
+
+    print '\ntrain vs test without resample:'
+    evaluate_classifier(train, test, CLASSIFIERS)
+
+    print '\nCross validation with resample:'
+    scores = cross_validation(train, CLASSIFIERS)
+
+    # todo: resample - train vs test
+
+    # Clustering CV average score
+    clustering_cv_average_score = clustering_cross_validation(train, CLUSTERS)
+    print '\nClustering CV average score: ' + str(clustering_cv_average_score)
+
+    # Clustering train vs test score
+    clustering_score = evaluate_clustering(train, test, CLUSTERS)
+    print '\nClustering train vs test score: ' + str(clustering_score)
 
     # predict votes:
     # best_classifier_name = max(scores.iteritems(), key=operator.itemgetter(1))[0]
@@ -407,7 +541,6 @@ def main():
     counts['predicted'] = proba.sum()
     counts['percentage'] = counts['predicted'] / len(unlabeled) * 100
     print counts
-
 
 
 if __name__ == "__main__":
