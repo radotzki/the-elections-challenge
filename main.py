@@ -271,7 +271,6 @@ def prepare_data(continuous_features, features_to_keep, df):
     df['Financial_agenda_matters'] = df['Financial_agenda_matters'].map(lambda x: 1 if x == 1 else -1)
     # nominal
     dummies_df = pd.get_dummies(df['Most_Important_Issue'], prefix='Most_Important_Issue')
-    dummies_df[dummies_df == 0] = -1
     df = pd.concat([df, dummies_df], axis=1, join='inner').drop('Most_Important_Issue', axis=1)
     return df
 
@@ -306,8 +305,8 @@ def cross_validation(_df, classifiers):
 #     for k, (train_index, test_index) in enumerate(kf):
 #         # we want to make up for parties with little voters, as the distribution in the test set might be different
 #         # it's important to do it after the division to train and test, otherwise we might (almost certainly) have the same line in the train and test.
-#         train_sets.append(resample(_df.iloc[train_index].reset_index()))
-#         test_sets.append(resample(_df.iloc[test_index].reset_index()))
+#         train_sets.append(resample(_df.iloc[train_index]))
+#         test_sets.append(resample(_df.iloc[test_index]))
 #
 #     pickle.dump(train_sets, open('train_sets.pickle', 'w'))
 #     pickle.dump(test_sets, open('test_sets.pickle', 'w'))
@@ -364,6 +363,7 @@ def cross_validation_wo_resample(_df, classifiers):
 
 def resample(df):
     print "resampling.."
+    df = df.reset_index()
     rows_to_select = range(len(df))
     vote_counts = df.Vote.value_counts()
     for party in xrange(10):
@@ -461,6 +461,8 @@ def get_best_cluster(train, test, clusters):
 
 
 def evaluate_clustering(train, test, clusters):
+    train = resample(train)
+    test = resample(test)
     cls = get_best_cluster(train, test, clusters)
     cls.fit(train.drop('Vote', axis=1).values, train.Vote.values)
     train_pred = cls.predict(train.drop('Vote', axis=1).values)
