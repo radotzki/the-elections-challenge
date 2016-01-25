@@ -486,12 +486,12 @@ def evaluate_clustering(train, test, clusters, classifiers):
     return score
 
 
-def clustering_cross_validation(train, clusters):
+def clustering_cross_validation(train, clusters, classifiers):
     scores = list()
     kf = KFold(n=len(train), n_folds=5, shuffle=True)
     for k, (train_index, test_index) in enumerate(kf):
         print '\nEvaluating fold #' + str(k)
-        score = evaluate_clustering(train.iloc[train_index], train.iloc[test_index], clusters)
+        score = evaluate_clustering(train.iloc[train_index], train.iloc[test_index], clusters, classifiers)
         scores.append(score)
         print 'Fold #' + str(k) + ', total score: ' + str(score)
 
@@ -520,7 +520,7 @@ def main():
     # todo: resample - train vs test
 
     # Clustering CV average score
-    clustering_cv_average_score = clustering_cross_validation(train, CLUSTERS)
+    clustering_cv_average_score = clustering_cross_validation(train, CLUSTERS, CLASSIFIERS)
     print '\nClustering CV average score: ' + str(clustering_cv_average_score)
 
     # Clustering train vs test score
