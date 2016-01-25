@@ -28,19 +28,19 @@ from sklearn.cross_validation import cross_val_score
 from sklearn.cross_validation import train_test_split
 
 CLASSIFIERS = {
-    "Random Forest 5": RandomForestClassifier(n_estimators=5),
-    "Random Forest 10": RandomForestClassifier(n_estimators=10),
-    "Random Forest 20": RandomForestClassifier(n_estimators=20),
+    # "Random Forest 5": RandomForestClassifier(n_estimators=5),
+    # "Random Forest 10": RandomForestClassifier(n_estimators=10),
+    # "Random Forest 20": RandomForestClassifier(n_estimators=20),
     "Random Forest 40": RandomForestClassifier(n_estimators=50),
-    "Random Forest 100": RandomForestClassifier(n_estimators=100),
-    "Decision Tree 5": DecisionTreeClassifier(max_depth=5),
+    # "Random Forest 100": RandomForestClassifier(n_estimators=100),
+    # "Decision Tree 5": DecisionTreeClassifier(max_depth=5),
     "Decision Tree 10": DecisionTreeClassifier(max_depth=10),
-    "Decision Tree 20": DecisionTreeClassifier(max_depth=20),
-    "Nearest Neighbors 4": KNeighborsClassifier(n_neighbors=4),
-    "Nearest Neighbors 25": KNeighborsClassifier(n_neighbors=25),
+    # "Decision Tree 20": DecisionTreeClassifier(max_depth=20),
+    # "Nearest Neighbors 4": KNeighborsClassifier(n_neighbors=4),
+    # "Nearest Neighbors 25": KNeighborsClassifier(n_neighbors=25),
     "Nearest Neighbors 6": KNeighborsClassifier(n_neighbors=6),
     # "AdaBoost 100": AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100),
-    # "AdaBoost 1000": AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000),
+    "AdaBoost 1000": AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000),
     # "Perceptron  100": Perceptron(n_iter=100),
     # "Linear SVM OVO 0.1": SVC(kernel="linear", C=0.1, probability=True),
     # "Linear SVM OVO 1": SVC(kernel="linear", C=1, probability=True),
@@ -460,7 +460,7 @@ def get_best_cluster(train, test, clusters):
     return best_cluster
 
 
-def evaluate_clustering(train, test, clusters):
+def evaluate_clustering(train, test, clusters, classifiers):
     train = resample(train)
     test = resample(test)
     cls = get_best_cluster(train, test, clusters)
@@ -474,10 +474,11 @@ def evaluate_clustering(train, test, clusters):
         test_cluster = test.iloc[[x for x, y in enumerate(test_pred) if y==v]]
 
         if not test_cluster.empty:
-
-            clf = DecisionTreeClassifier(max_depth=5)
-            clf.fit(train_cluster.drop('Vote', axis=1).values, train_cluster.Vote.values)
-            score = clf.score(test_cluster.drop('Vote', axis=1).values, test_cluster.Vote.values)
+            # clf = DecisionTreeClassifier(max_depth=5)
+            # clf = classifiers[evaluate_classifier(train_cluster, test_cluster, classifiers)[0]]
+            # clf.fit(train_cluster.drop('Vote', axis=1).values, train_cluster.Vote.values)
+            # score = clf.score(test_cluster.drop('Vote', axis=1).values, test_cluster.Vote.values)
+            score = evaluate_classifier(train_cluster, test_cluster, classifiers)[1]
             print 'cluster #' + str(v) + ', score: ' + str(score)
             right += score * len(test_cluster)
 
@@ -523,7 +524,7 @@ def main():
     print '\nClustering CV average score: ' + str(clustering_cv_average_score)
 
     # Clustering train vs test score
-    clustering_score = evaluate_clustering(train, test, CLUSTERS)
+    clustering_score = evaluate_clustering(train, test, CLUSTERS, CLASSIFIERS)
     print '\nClustering train vs test score: ' + str(clustering_score)
 
     # predict votes:
