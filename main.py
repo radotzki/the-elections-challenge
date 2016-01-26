@@ -36,7 +36,10 @@ CLASSIFIERS_GENERATORS = {
     "Decision Tree 10": lambda: DecisionTreeClassifier(max_depth=10),
     # "Decision Tree 20": lambda: DecisionTreeClassifier(max_depth=20),
     # "Nearest Neighbors 4": lambda: KNeighborsClassifier(n_neighbors=4),
+    # "Nearest Neighbors 20": lambda: KNeighborsClassifier(n_neighbors=20),
     # "Nearest Neighbors 25": lambda: KNeighborsClassifier(n_neighbors=25),
+    # "Nearest Neighbors 35": lambda: KNeighborsClassifier(n_neighbors=35),
+    # "Nearest Neighbors 50": lambda: KNeighborsClassifier(n_neighbors=50),
     "Nearest Neighbors 6": lambda: KNeighborsClassifier(n_neighbors=6),
     # "AdaBoost 100": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100),
     # "AdaBoost 1000": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000),
@@ -454,7 +457,7 @@ def evaluate_classifier(train, test, classifiers):
 
     best_classifier = max(scores.iteritems(), key=operator.itemgetter(1))
     print 'best classifier: ' + best_classifier[0] + ', score: ' + str(best_classifier[1])
-    return best_classifier
+    return scores
 
 
 def get_best_cluster(train, test, clusters):
@@ -478,22 +481,21 @@ def evaluate_clustering(train, test, clusters, classifiers):
     train_pred = cls.predict(train.drop('Vote', axis=1).values)
     test_pred = cls.predict(test.drop('Vote', axis=1).values)
     right = 0.
+    clusters_score = pd.DataFrame(classifiers.items(), columns=['Classifier', 'Score'])
+    clusters_score.Score = 0
 
     for v in xrange(cls.n_components):
         train_cluster = train.iloc[[x for x, y in enumerate(train_pred) if y==v]]
         test_cluster = test.iloc[[x for x, y in enumerate(test_pred) if y==v]]
 
         if not test_cluster.empty:
-            # clf = DecisionTreeClassifier(max_depth=5)
-            # clf = classifiers[evaluate_classifier(train_cluster, test_cluster, classifiers)[0]]
-            # clf.fit(train_cluster.drop('Vote', axis=1).values, train_cluster.Vote.values)
-            # score = clf.score(test_cluster.drop('Vote', axis=1).values, test_cluster.Vote.values)
-            score = evaluate_classifier(train_cluster, test_cluster, classifiers)[1]
-            print 'cluster #' + str(v) + ', score: ' + str(score)
-            right += score * len(test_cluster)
+            classifiers_score = evaluate_classifier(train_cluster, test_cluster, classifiers)
+            classifiers_score = pd.DataFrame(classifiers_score.items(), columns=['Classifier', 'Score'])
+            clusters_score.Score += classifiers_score.Score * len(test_cluster)
 
-    score = right / len(test)
-    return score
+    best_classifier = clusters_score[clusters_score.Score==clusters_score.Score.max()].iloc[0]
+    best_classifier.Score /= len(test)
+    return best_classifier
 
 
 def clustering_cross_validation(train, clusters, classifiers):
@@ -501,9 +503,9 @@ def clustering_cross_validation(train, clusters, classifiers):
     kf = KFold(n=len(train), n_folds=5, shuffle=True)
     for k, (train_index, test_index) in enumerate(kf):
         print '\nEvaluating fold #' + str(k)
-        score = evaluate_clustering(train.iloc[train_index], train.iloc[test_index], clusters, classifiers)
-        scores.append(score)
-        print 'Fold #' + str(k) + ', total score: ' + str(score)
+        cluster_score = evaluate_clustering(train.iloc[train_index], train.iloc[test_index], clusters, classifiers)
+        scores.append(cluster_score.Score)
+        print 'Fold #' + str(k) + ', total score: ' + str(cluster_score.Score) + ', classifier: ' + str(cluster_score.Classifier)
 
     return sum(scores)/len(scores)
 
@@ -535,7 +537,7 @@ def main():
 
     # Clustering train vs test score
     clustering_score = evaluate_clustering(train, test, CLUSTERS, CLASSIFIERS)
-    print '\nClustering train vs test score: ' + str(clustering_score)
+    print '\nClustering train vs test score: ' + str(clustering_score.Score) + ', Classifier: ' + clustering_score.Classifier
 
     # predict votes:
     # best_classifier_name = max(scores.iteritems(), key=operator.itemgetter(1))[0]
