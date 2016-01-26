@@ -26,33 +26,33 @@ import scipy.interpolate
 import random
 from sklearn.cross_validation import cross_val_score
 from sklearn.cross_validation import train_test_split
-
-CLASSIFIERS = {
-    # "Random Forest 5": RandomForestClassifier(n_estimators=5),
-    # "Random Forest 10": RandomForestClassifier(n_estimators=10),
-    # "Random Forest 20": RandomForestClassifier(n_estimators=20),
-    "Random Forest 40": RandomForestClassifier(n_estimators=50),
-    # "Random Forest 100": RandomForestClassifier(n_estimators=100),
-    # "Decision Tree 5": DecisionTreeClassifier(max_depth=5),
-    "Decision Tree 10": DecisionTreeClassifier(max_depth=10),
-    # "Decision Tree 20": DecisionTreeClassifier(max_depth=20),
-    # "Nearest Neighbors 4": KNeighborsClassifier(n_neighbors=4),
-    # "Nearest Neighbors 25": KNeighborsClassifier(n_neighbors=25),
-    "Nearest Neighbors 6": KNeighborsClassifier(n_neighbors=6),
-    # "AdaBoost 100": AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100),
-    "AdaBoost 1000": AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000),
-    # "Perceptron  100": Perceptron(n_iter=100),
-    # "Linear SVM OVO 0.1": SVC(kernel="linear", C=0.1, probability=True),
-    # "Linear SVM OVO 1": SVC(kernel="linear", C=1, probability=True),
-    # "Linear SVM OVO 10": SVC(kernel="linear", C=10, probability=True),
-    # "rbf SVM OVO 0.1": SVC(kernel="rbf", C=0.1, probability=True),
-    # "rbf SVM OVO 1": SVC(kernel="rbf", C=1, probability=True),
-    # "rbf SVM OVO 10": SVC(kernel="rbf", C=10, probability=True),
-    # "Linear SVM OVR 0.1": LinearSVC(C=.1),
-    # "Linear SVM OVR 1": LinearSVC(C=1),
-    # "Linear SVM OVR 10": LinearSVC(C=10),
-    # "GaussianNB": GaussianNB(),
+CLASSIFIERS_GENERATORS = {
+    # "Random Forest 5": lambda: RandomForestClassifier(n_estimators=5),
+    "Random Forest 10": lambda: RandomForestClassifier(n_estimators=10),
+    # "Random Forest 20": lambda: RandomForestClassifier(n_estimators=20),
+    # "Random Forest 40": lambda: RandomForestClassifier(n_estimators=50),
+    # "Random Forest 100": lambda: RandomForestClassifier(n_estimators=100),
+    # "Decision Tree 5": lambda: DecisionTreeClassifier(max_depth=5),
+    "Decision Tree 10": lambda: DecisionTreeClassifier(max_depth=10),
+    # "Decision Tree 20": lambda: DecisionTreeClassifier(max_depth=20),
+    # "Nearest Neighbors 4": lambda: KNeighborsClassifier(n_neighbors=4),
+    # "Nearest Neighbors 25": lambda: KNeighborsClassifier(n_neighbors=25),
+    "Nearest Neighbors 6": lambda: KNeighborsClassifier(n_neighbors=6),
+    # "AdaBoost 100": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100),
+    # "AdaBoost 1000": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000),
+    # "Perceptron  100": lambda: Perceptron(n_iter=100),
+    # "Linear SVM OVO 0.1": lambda: SVC(kernel="linear", C=0.1, probability=True),
+    # "Linear SVM OVO 1": lambda: SVC(kernel="linear", C=1, probability=True),
+    # "Linear SVM OVO 10": lambda: SVC(kernel="linear", C=10, probability=True),
+    # "rbf SVM OVO 0.1": lambda: SVC(kernel="rbf", C=0.1, probability=True),
+    # "rbf SVM OVO 1": lambda: SVC(kernel="rbf", C=1, probability=True),
+    # "rbf SVM OVO 10": lambda: SVC(kernel="rbf", C=10, probability=True),
+    # "Linear SVM OVR 0.1": lambda: LinearSVC(C=.1),
+    # "Linear SVM OVR 1": lambda: LinearSVC(C=1),
+    # "Linear SVM OVR 10": lambda: LinearSVC(C=10),
+    # "GaussianNB": lambda: GaussianNB(),
 }
+CLASSIFIERS = {name: clf_gen() for name, clf_gen in CLASSIFIERS_GENERATORS.iteritems()}
 
 CLUSTERS = {
     "GMM 11": GMM(n_components=11, covariance_type='diag'),
@@ -376,6 +376,8 @@ def resample(df):
 class MyClassifier(object):
     def __init__(self, scores):
         self.scores = scores
+        self.classifiers = {}
+
     def predict(self, X):
         proba=self.predict_proba(X)
         proba.fillna(0, inplace=True)
@@ -383,8 +385,12 @@ class MyClassifier(object):
 
     def predict_proba(self, X):
         prediction_scores = defaultdict(lambda: defaultdict(float))
-        for name, classifier in CLASSIFIERS.iteritems():
-            self.update_prediction_scores(X, classifier, name, prediction_scores)
+        if len(self.values)==1:
+            for i in xrange(len(X)):
+                prediction_scores[i][self.values[0]]=1
+        else:
+            for name, classifier in self.classifiers.iteritems():
+                self.update_prediction_scores(X, classifier, name, prediction_scores)
 
         ret_val = pd.DataFrame(prediction_scores)
         ret_val = ret_val/ret_val.sum()
@@ -406,19 +412,23 @@ class MyClassifier(object):
         return right / len(y)
 
     def fit(self, X, y):
-        for classifier in CLASSIFIERS.itervalues():
-            classifier.fit(X, y)
+        self.values = sorted(set(y))
+        if len(self.values)>1:
+            for name, classifier_gen in CLASSIFIERS_GENERATORS.iteritems():
+                classifier = classifier_gen()
+                classifier.fit(X, y)
+                self.classifiers[name] = classifier
 
 
 class MyClassifier2(MyClassifier):
     def update_prediction_scores(self, X, classifier, name, prediction_scores):
         if (hasattr(classifier, 'predict_proba') and
-                (not hasattr(classifier, 'n_classes_') or classifier.n_classes_ > 1) and
+                #(not hasattr(classifier, 'n_classes_') or classifier.n_classes_ > 1) and
                 is_valid_classifier(classifier, X)):
             predictions = classifier.predict_proba(X)
             for row_num in xrange(len(X)):
                 for i in xrange(len(predictions[row_num])):
-                    prediction_scores[row_num][i] += predictions[row_num][i]*self.scores[name]
+                    prediction_scores[row_num][self.values[i]] += predictions[row_num][i]*self.scores[name]
 
 
 def is_valid_classifier(clf, test):
