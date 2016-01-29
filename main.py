@@ -27,43 +27,33 @@ import random
 from sklearn.cross_validation import cross_val_score
 from sklearn.cross_validation import train_test_split
 CLASSIFIERS_GENERATORS = {
-    # "Random Forest 5": lambda: RandomForestClassifier(n_estimators=5),
-    # "Random Forest 10": lambda: RandomForestClassifier(n_estimators=10),
-    # "Random Forest 20": lambda: RandomForestClassifier(n_estimators=20),
+    "Random Forest 5": lambda: RandomForestClassifier(n_estimators=5),
+    "Random Forest 10": lambda: RandomForestClassifier(n_estimators=10),
+    "Random Forest 20": lambda: RandomForestClassifier(n_estimators=20),
     "Random Forest 40": lambda: RandomForestClassifier(n_estimators=50),
-    # "Random Forest 80": lambda: RandomForestClassifier(n_estimators=80),
-    # "Random Forest 100": lambda: RandomForestClassifier(n_estimators=100),
-    # "Random Forest 120": lambda: RandomForestClassifier(n_estimators=120),
-    # "Decision Tree 5": lambda: DecisionTreeClassifier(max_depth=5),
-    # "Decision Tree 10": lambda: DecisionTreeClassifier(max_depth=10),
+    "Random Forest 80": lambda: RandomForestClassifier(n_estimators=80),
+    "Random Forest 100": lambda: RandomForestClassifier(n_estimators=100),
+    "Random Forest 120": lambda: RandomForestClassifier(n_estimators=120),
+    "Decision Tree 5": lambda: DecisionTreeClassifier(max_depth=5),
+    "Decision Tree 10": lambda: DecisionTreeClassifier(max_depth=10),
     "Decision Tree 20": lambda: DecisionTreeClassifier(max_depth=20),
-    # "Nearest Neighbors 4": lambda: KNeighborsClassifier(n_neighbors=4),
-    # "Nearest Neighbors 20": lambda: KNeighborsClassifier(n_neighbors=20),
-    # "Nearest Neighbors 25": lambda: KNeighborsClassifier(n_neighbors=25),
-    # "Nearest Neighbors 35": lambda: KNeighborsClassifier(n_neighbors=35),
-    # "Nearest Neighbors 50": lambda: KNeighborsClassifier(n_neighbors=50),
-    # "Nearest Neighbors 6": lambda: KNeighborsClassifier(n_neighbors=6),
-    # "AdaBoost 100": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100),
-    # "AdaBoost 500": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=500),
+    "Nearest Neighbors 5": lambda: KNeighborsClassifier(n_neighbors=5),
+    "Nearest Neighbors 21": lambda: KNeighborsClassifier(n_neighbors=21),
+    "Nearest Neighbors 26": lambda: KNeighborsClassifier(n_neighbors=26),
+    "Nearest Neighbors 35": lambda: KNeighborsClassifier(n_neighbors=35),
+    "Nearest Neighbors 51": lambda: KNeighborsClassifier(n_neighbors=51),
+    "Nearest Neighbors 7": lambda: KNeighborsClassifier(n_neighbors=7),
+    "AdaBoost 100": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100),
+    "AdaBoost 500": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=500),
     "AdaBoost 1000": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000),
-    # "AdaBoost 1200": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1200),
-    # "AdaBoost12 1000": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=12), n_estimators=1000),
-    # "Perceptron  100": lambda: Perceptron(n_iter=100),
-    # "Linear SVM OVO 0.1": lambda: SVC(kernel="linear", C=0.1, probability=True),
-    # "Linear SVM OVO 1": lambda: SVC(kernel="linear", C=1, probability=True),
-    # "Linear SVM OVO 10": lambda: SVC(kernel="linear", C=10, probability=True),
-    # "rbf SVM OVO 0.1": lambda: SVC(kernel="rbf", C=0.1, probability=True),
-    # "rbf SVM OVO 1": lambda: SVC(kernel="rbf", C=1, probability=True),
-    # "rbf SVM OVO 10": lambda: SVC(kernel="rbf", C=10, probability=True),
-    # "rbf SVM OVO 20": lambda: SVC(kernel="rbf", C=20, probability=True),
-    # "rbf SVM OVO 30": lambda: SVC(kernel="rbf", C=30, probability=True),
-    # "rbf SVM OVO 40": lambda: SVC(kernel="rbf", C=40, probability=True),
-    # "rbf SVM OVO 80": lambda: SVC(kernel="rbf", C=80, probability=True),
-    # "rbf SVM OVO 100": lambda: SVC(kernel="rbf", C=100, probability=True),
-    # "rbf SVM OVO 120": lambda: SVC(kernel="rbf", C=120, probability=True),
-    # "Linear SVM OVR 0.1": lambda: LinearSVC(C=.1),
-    # "Linear SVM OVR 1": lambda: LinearSVC(C=1),
-    # "Linear SVM OVR 10": lambda: LinearSVC(C=10),
+    "AdaBoost 1200": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1200),
+    "AdaBoost12 1000": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=12), n_estimators=1000),
+    "rbf SVM OVO 100": lambda: SVC(kernel="rbf", C=100, probability=True),
+    "rbf SVM OVO 120": lambda: SVC(kernel="rbf", C=120, probability=True),
+    "rbf SVM OVO 500": lambda: SVC(kernel="rbf", C=500, probability=True),
+    "rbf SVM OVO 700": lambda: SVC(kernel="rbf", C=700, probability=True),
+    "rbf SVM OVO 900": lambda: SVC(kernel="rbf", C=900, probability=True),
+    "rbf SVM OVO 1100": lambda: SVC(kernel="rbf", C=1100, probability=True),
     # "GaussianNB": lambda: GaussianNB(),
 }
 CLASSIFIERS = {name: clf_gen() for name, clf_gen in CLASSIFIERS_GENERATORS.iteritems()}
@@ -363,7 +353,6 @@ def cross_validation_wo_bootstrap(_df, classifiers):
     kf = KFold(n=len(_df), n_folds=n_folds, shuffle=True)
     name, clf = 'MyClassifier2', MyClassifier2(scores)
     score_sum = 0
-    print 'start ' + str(name) + ' test..'
     for k, (train_index, test_index) in enumerate(kf):
         clf.fit(_df.iloc[train_index].drop('Vote', axis=1).values, _df.iloc[train_index].Vote.values)
         acc = clf.score(_df.iloc[test_index].drop('Vote', axis=1).values, _df.iloc[test_index].Vote.values)
@@ -549,7 +538,6 @@ def voters_division_cv(df, classifiers, _bootstrap):
         train = df.iloc[train_index]
         test = df.iloc[test_index]
 
-        print '\nEvaluating fold #' + str(k)
         for name, score in get_voters_division_score(train, test, classifiers, _bootstrap).iteritems():
             scores[name] += score
 
@@ -569,29 +557,31 @@ def main():
     train, test = train_test_split(labeled, test_size=0.4)
     test, validation = train_test_split(test, test_size=0.5)
 
-    print '\nCross validation without bootstrap:'
+    print '\n\nCross validation without bootstrap:'
     cross_validation_wo_bootstrap(train, CLASSIFIERS)
 
-    print '\ntrain vs test without bootstrap:'
+    print '\n\ntrain vs test without bootstrap:'
     scores = evaluate_classifier(train, test, CLASSIFIERS, False)
     best_classifier = max(scores.iteritems(), key=operator.itemgetter(1))
     print 'best classifier: ' + best_classifier[0] + ', score: ' + str(best_classifier[1])
     print scores
 
-    print '\nCross validation with bootstrap:'
+    print '\n\nCross validation with bootstrap:'
     scores = cross_validation(train, CLASSIFIERS)
 
-    print '\ntrain vs test with bootstrap:'
+    print '\n\ntrain vs test with bootstrap:'
     scores = evaluate_classifier(train, test, CLASSIFIERS, True)
     best_classifier = max(scores.iteritems(), key=operator.itemgetter(1))
     print 'best classifier: ' + best_classifier[0] + ', score: ' + str(best_classifier[1])
     print scores
 
-    print 'Clustering CV average score:'
+    print '\n\nClustering CV'
     clustering_cv_average_score = clustering_cross_validation(train, CLUSTERS, CLASSIFIERS)
-    print '\nClustering CV average score: ' + str(clustering_cv_average_score)
+    best_classifier = clustering_cv_average_score[clustering_cv_average_score.Score==clustering_cv_average_score.Score.max()].iloc[0]
+    print 'best classifier: ' + best_classifier.Classifier + ', score: ' + str(best_classifier.Score)
+    print clustering_cv_average_score
 
-    print '\nClustering train vs test'
+    print '\n\nClustering train vs test'
     clustering_score = evaluate_clustering(train, test, CLUSTERS, CLASSIFIERS)
     best_classifier = clustering_score[clustering_score.Score==clustering_score.Score.max()].iloc[0]
     print 'best classifier: ' + str(best_classifier.Classifier) + ', score: ' + str(best_classifier.Score)
@@ -609,17 +599,19 @@ def main():
     prediction.to_csv('predictions.csv', index=False)
 
     # division of voters:
-    print 'division of voters: cv with bootstrap'
+    print '\n\ndivision of voters: cv with bootstrap'
     voters_division_cv(train, CLASSIFIERS, True)
 
-    print 'division of voters: cv without bootstrap'
+    print '\n\ndivision of voters: cv without bootstrap'
     voters_division_cv(train, CLASSIFIERS, False)
 
-    print 'division of voters: train vs test with bootstrap'
-    print get_voters_division_score(train, test, CLASSIFIERS, True)
+    print '\n\ndivision of voters: train vs test with bootstrap'
+    for name, score in get_voters_division_score(train, test, CLASSIFIERS, True).iteritems():
+        print name + " score: " + str(score)
 
-    print 'division of voters: train vs test without bootstrap'
-    print get_voters_division_score(train, test, CLASSIFIERS, False)
+    print '\n\ndivision of voters: train vs test without bootstrap'
+    for name, score in get_voters_division_score(train, test, CLASSIFIERS, False).iteritems():
+        print name + " score: " + str(score)
 
     division_clf = AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100)
     division_clf.fit(labeled.drop('Vote', axis=1).values, labeled.Vote.values)
