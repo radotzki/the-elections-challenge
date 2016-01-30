@@ -30,31 +30,30 @@ CLASSIFIERS_GENERATORS = {
     "Random Forest 5": lambda: RandomForestClassifier(n_estimators=5),
     "Random Forest 10": lambda: RandomForestClassifier(n_estimators=10),
     "Random Forest 20": lambda: RandomForestClassifier(n_estimators=20),
-    # "Random Forest 40": lambda: RandomForestClassifier(n_estimators=50),
-    # "Random Forest 80": lambda: RandomForestClassifier(n_estimators=80),
-    # "Random Forest 100": lambda: RandomForestClassifier(n_estimators=100),
-    # "Random Forest 120": lambda: RandomForestClassifier(n_estimators=120),
-    # "Decision Tree 5": lambda: DecisionTreeClassifier(max_depth=5),
+    "Random Forest 40": lambda: RandomForestClassifier(n_estimators=50),
+    "Random Forest 80": lambda: RandomForestClassifier(n_estimators=80),
+    "Random Forest 100": lambda: RandomForestClassifier(n_estimators=100),
+    "Random Forest 120": lambda: RandomForestClassifier(n_estimators=120),
+    "Decision Tree 5": lambda: DecisionTreeClassifier(max_depth=5),
     "Decision Tree 10": lambda: DecisionTreeClassifier(max_depth=10),
     "Decision Tree 20": lambda: DecisionTreeClassifier(max_depth=20),
     "Nearest Neighbors 5": lambda: KNeighborsClassifier(n_neighbors=5),
-    # "Nearest Neighbors 21": lambda: KNeighborsClassifier(n_neighbors=21),
-    # "Nearest Neighbors 26": lambda: KNeighborsClassifier(n_neighbors=26),
-    # "Nearest Neighbors 35": lambda: KNeighborsClassifier(n_neighbors=35),
+    "Nearest Neighbors 21": lambda: KNeighborsClassifier(n_neighbors=21),
+    "Nearest Neighbors 26": lambda: KNeighborsClassifier(n_neighbors=26),
+    "Nearest Neighbors 35": lambda: KNeighborsClassifier(n_neighbors=35),
     "Nearest Neighbors 51": lambda: KNeighborsClassifier(n_neighbors=51),
     "Nearest Neighbors 7": lambda: KNeighborsClassifier(n_neighbors=7),
-    # "AdaBoost 100": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100),
-    # "AdaBoost 500": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=500),
-    # "AdaBoost 1000": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000),
-    # "AdaBoost 1200": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1200),
-    # "AdaBoost12 1000": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=12), n_estimators=1000),
-    # "rbf SVM OVO 100": lambda: SVC(kernel="rbf", C=100, probability=True),
-    # "rbf SVM OVO 120": lambda: SVC(kernel="rbf", C=120, probability=True),
-    # "rbf SVM OVO 500": lambda: SVC(kernel="rbf", C=500, probability=True),
-    # "rbf SVM OVO 700": lambda: SVC(kernel="rbf", C=700, probability=True),
-    # "rbf SVM OVO 900": lambda: SVC(kernel="rbf", C=900, probability=True),
-    # "rbf SVM OVO 1100": lambda: SVC(kernel="rbf", C=1100, probability=True),
-    # "GaussianNB": lambda: GaussianNB(),
+    "AdaBoost 100": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100),
+    "AdaBoost 500": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=500),
+    "AdaBoost 1000": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000),
+    "AdaBoost 1200": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1200),
+    "AdaBoost12 1000": lambda: AdaBoostClassifier(DecisionTreeClassifier(max_depth=12), n_estimators=1000),
+    "rbf SVM OVO 100": lambda: SVC(kernel="rbf", C=100, probability=True),
+    "rbf SVM OVO 120": lambda: SVC(kernel="rbf", C=120, probability=True),
+    "rbf SVM OVO 500": lambda: SVC(kernel="rbf", C=500, probability=True),
+    "rbf SVM OVO 700": lambda: SVC(kernel="rbf", C=700, probability=True),
+    "rbf SVM OVO 900": lambda: SVC(kernel="rbf", C=900, probability=True),
+    "rbf SVM OVO 1100": lambda: SVC(kernel="rbf", C=1100, probability=True),
 }
 CLASSIFIERS = {name: clf_gen() for name, clf_gen in CLASSIFIERS_GENERATORS.iteritems()}
 
@@ -268,7 +267,7 @@ def prepare_data(continuous_features, features_to_keep, df):
                 if 'Vote' in df.columns:
                     df[c][row] = df[df.Vote == df.Vote[row]][c].mean()
                 else:
-                    df[c][row] = df[c].mean()  # TODO maybe we can do something better here
+                    df[c][row] = df[c].mean()
     z_score_scaling(df, continuous_features)
     # binaries
     df['Will_vote_only_large_party'] = df['Will_vote_only_large_party'].map(lambda x: 1 if x == 1 else -1)
@@ -305,18 +304,13 @@ def load_and_prepare_data():
 def cross_validation(_df, classifiers):
     n_folds = 10
     kf = KFold(n=len(_df), n_folds=n_folds, shuffle=True)
-#     train_sets=list()
-#     test_sets=list()
-#     for k, (train_index, test_index) in enumerate(kf):
-#         # we want to make up for parties with little voters, as the distribution in the test set might be different
-#         # it's important to do it after the division to train and test, otherwise we might (almost certainly) have the same line in the train and test.
-#         train_sets.append(bootstrap(_df.iloc[train_index]))
-#         test_sets.append(bootstrap(_df.iloc[test_index]))
-#
-#     pickle.dump(train_sets, open('train_sets.pickle', 'w'))
-#     pickle.dump(test_sets, open('test_sets.pickle', 'w'))
-    train_sets=pickle.load(open('train_sets.pickle'))
-    test_sets=pickle.load(open('test_sets.pickle'))
+    train_sets=list()
+    test_sets=list()
+    for k, (train_index, test_index) in enumerate(kf):
+        # we want to make up for parties with little voters, as the distribution in the test set might be different
+        # it's important to do it after the division to train and test, otherwise we might (almost certainly) have the same line in the train and test.
+        train_sets.append(bootstrap(_df.iloc[train_index]))
+        test_sets.append(bootstrap(_df.iloc[test_index]))
 
     scores = {}
     for name, clf in classifiers.iteritems():
@@ -336,7 +330,6 @@ def cross_validation(_df, classifiers):
         acc = clf.score(test_sets[k].drop('Vote', axis=1).values, test_sets[k].Vote.values)
         score_sum += acc
     print("{0} average score: {1:.5}".format(name, score_sum / kf.n_folds))
-    # scores[name] = score_sum / kf.n_folds
 
     return scores
 
@@ -544,18 +537,13 @@ def voters_division_cv(df, classifiers, _bootstrap):
             scores[name] += score/n_folds
 
     for name, score in scores.iteritems():
-        print name + " score: " + str(score)
+        print name + " error: " + str(score)
 
     return scores
 
 
 def main():
-    # labeled, unlabeled, l_encoder = load_and_prepare_data()
-    # labeled.to_csv('dataset/labeled.csv', index=False)
-    # unlabeled.to_csv('dataset/unlabeled.csv', index=False)
-    labeled = pd.read_csv('dataset/labeled.csv')
-    unlabeled = pd.read_csv('dataset/unlabeled.csv')
-    l_encoder = pickle.load(open('encoder.pickle'))
+    labeled, unlabeled, l_encoder = load_and_prepare_data()
 
     train, test = train_test_split(labeled, test_size=0.4)
     test, validation = train_test_split(test, test_size=0.5)
@@ -619,7 +607,7 @@ def main():
     prediction['PredictVote'] = l_encoder.inverse_transform(predict)
     prediction.to_csv('predictions.csv', index=False)
 
-    division_clf = AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=100)
+    division_clf = DecisionTreeClassifier(max_depth=5)
     division_clf.fit(bootstrap_labeled.drop('Vote', axis=1).values, bootstrap_labeled.Vote.values)
     proba = pd.DataFrame(division_clf.predict_proba(unlabeled.drop('IdentityCard_Num', axis=1)))
     proba.columns = l_encoder.classes_
