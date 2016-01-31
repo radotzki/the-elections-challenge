@@ -600,7 +600,8 @@ def main():
     bootstrap_labeled = bootstrap(labeled)
 
     # predict votes
-    clf = AdaBoostClassifier(DecisionTreeClassifier(max_depth=15), n_estimators=1000)
+    scores = cross_validation(labeled, CLASSIFIERS)
+    clf = MyClassifier2(scores)
     clf.fit(bootstrap_labeled.drop('Vote', axis=1).values, bootstrap_labeled.Vote.values)
     prediction = pd.DataFrame(unlabeled['IdentityCard_Num'])
     predict = clf.predict(unlabeled.drop('IdentityCard_Num', axis=1))
